@@ -9,6 +9,7 @@ Right now the actual scripts aren't much, either difficult to read/understand/de
 Some old stuff that I had already completed, include a:
 -  Pixel-based text writing (**no image file required**) *(complete)*
 -  GUI system for the canvas (**no image files required**) *(complete)*
+
 But these things are written poorly, and lack customizability. Each GUI element is simply contained within a function that does the drawing and checks, and in general the code is poorly optimized (GUI is redrawn every frame instead of only when needed, etc).
 
 I hope to complete this sort of thing:
