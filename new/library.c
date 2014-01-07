@@ -194,10 +194,10 @@ void subimage_draw(Image source, int x_1, int y_1, int x_2, int y_2, int x_offse
         color.r = min(color.r, color.r - (255-(source.r)));
         color.g = min(color.g, color.g - (255-(source.g)));
         color.b = min(color.b, color.b - (255-(source.b)));
+        setpen(color.r, color.g, color.b, 0, 1);
 
         switch(drawmode) {
           case 1:
-            setpen(color.r, color.g, color.b, 0, 1);
             putpixel(i-x1+x_offset, j-y1+y_offset);
             break;
 
