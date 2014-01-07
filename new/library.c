@@ -1,13 +1,15 @@
-//  ____ _____      _     _ _          
-// / ___| ____|    | |   (_) |__  ___  
-//| |  _|  _| _____| |   | | '_ \/ __| 
-//| |_| | |__|_____| |___| | |_) \__ \ 
-// \____|_____|    |_____|_|_.__/|___/ 
-//                                     
+//  ____ _____      _     _ _
+// / ___| ____|    | |   (_) |__  ___
+//| |  _|  _| _____| |   | | '_ \/ __|
+//| |_| | |__|_____| |___| | |_) \__ \
+// \____|_____|    |_____|_|_.__/|___/
+//
 
+// Defines
 #define true 1
 #define false 0
 
+// Typedefs
 typedef unsigned char Byte;
 typedef unsigned short int Word;
 typedef Byte bool;
@@ -15,20 +17,24 @@ typedef Byte boolean;
 typedef char* string;
 
 // (structs)
-// ____  _                   _        
-/// ___|| |_ _ __ _   _  ___| |_ ___  
-//\___ \| __| '__| | | |/ __| __/ __| 
-// ___) | |_| |  | |_| | (__| |_\__ \ 
-//|____/ \__|_|   \__,_|\___|\__|___/ 
-//                                    
+// ___                             
+//|_ _|_ __ ___   __ _  __ _  ___  
+// | || '_ ` _ \ / _` |/ _` |/ _ \ 
+// | || | | | | | (_| | (_| |  __/ 
+//|___|_| |_| |_|\__,_|\__, |\___| 
+//                     |___/       
+// ____  _                   _
+/// ___|| |_ _ __ _   _  ___| |_ ___
+//\___ \| __| '__| | | |/ __| __/ __|
+// ___) | |_| |  | |_| | (__| |_\__ \
+//|____/ \__|_|   \__,_|\___|\__|___/
+//
 
-// Pixel struct, not meant to be used normally.
+// RGB pixel struct
 struct Pixel {
   Byte r,g,b;
 };
-
-// Define this new image data type. Used to store any
-// images loaded or generated with this library
+// Image containment struct
 typedef struct image_struct {
   // Name of the image, not very important. Assigned to the
   // directory of the image + file + extension if loaded,
@@ -51,21 +57,23 @@ typedef struct image_struct {
   // angles.
   int angle;
 
-  // Font options
+  // Holds the scale to draw the text at, seperate from width/height
+  // scaling
+  double scale;
+
+  //
   // Number of characters and the ASCII code of the
   // first character.
   char characters;
   char first_character;
-  
+
   // Set these colors like you would a normal GE actor
   char r,g,b;
 
   // Stores a 2D array containing the image data dynamically
   struct Pixel** data;
 } Image;
-
 // Animation struct,
-// Contains a list of images for use with functions.
 typedef struct animation_struct {
   // Number of frames
   int frames;
@@ -77,13 +85,67 @@ typedef struct animation_struct {
   Image* images;
 } Animation;
 
-// (Drawing)
-// ____                     _              
-//|  _ \ _ __ __ ___      _(_)_ __   __ _  
-//| | | | '__/ _` \ \ /\ / / | '_ \ / _` | 
-//| |_| | | | (_| |\ V  V /| | | | | (_| | 
-//|____/|_|  \__,_| \_/\_/ |_|_| |_|\__, | 
-//                                  |___/  
+// (Tools)
+// _____           _      
+//|_   _|__   ___ | |___  
+//  | |/ _ \ / _ \| / __| 
+//  | | (_) | (_) | \__ \ 
+//  |_|\___/ \___/|_|___/ 
+//                        
+// Collection of functions for generic usage
+
+char * strInsert (char* txt, int pos, char* in) {
+    char firsthalf[255], secondhalf[255];
+    int i;
+    strncpy(firsthalf, txt, pos);
+
+    // And now loop through the rest and add it to
+    // secondhalf
+    for (i=0; i<(strlen(txt)-pos); i++) {
+        secondhalf[i] = txt[i+pos];
+    }
+
+    // Append the character to firsthalf
+    strcat(firsthalf, in);
+
+    // Reappend secondhalf
+    strcat(firsthalf, secondhalf);
+
+    // And make our text the new variable.
+    strcpy(txt, firsthalf);
+    return txt;
+}
+
+// Checks if SOURCE ends with CHECK
+int strend(char*source, char*check) {
+   char*temp1;
+   strncpy(temp1, source, strlen(source)-strlen(check));
+   strcat(temp1, check);
+   if(strcmp(source, temp1)==0) return 1;
+   else return 0;
+}
+
+// Checks if SOURCE begins with CHECK
+int strbeg(char*source, char*check) {
+    char*temp1;
+    strncpy(temp1, source, strlen(check));
+    if(!strcmp(temp1, check)) return 1;
+    else return 0;
+}
+
+// (image drawing)
+// ___                             
+//|_ _|_ __ ___   __ _  __ _  ___  
+// | || '_ ` _ \ / _` |/ _` |/ _ \ 
+// | || | | | | | (_| | (_| |  __/ 
+//|___|_| |_| |_|\__,_|\__, |\___| 
+//                     |___/       
+// ____                     _
+//|  _ \ _ __ __ ___      _(_)_ __   __ _
+//| | | | '__/ _` \ \ /\ / / | '_ \ / _` |
+//| |_| | | | (_| |\ V  V /| | | | | (_| |
+//|____/|_|  \__,_| \_/\_/ |_|_| |_|\__, |
+//                                  |___/
 
 // Draws a pixel to a specific scale on a similarly scaled XY grid.
 void putpixel_stretch(double x_pos, double y_pos, double x_scale, double y_scale) {
@@ -115,47 +177,36 @@ void subimage_draw(Image source, int x_1, int y_1, int x_2, int y_2, int x_offse
   int i, j;
   int x1 = min(x_1, x_2), x2 = max(x_1, x_2);
   int y1 = min(y_1, y_2), y2 = max(y_1, y_2);
-  int red, green, blue;
+  int drawmode = 1;
 
   // Determine if we need to use a scaled putpixel function
   if(source.width == source.original_width &&
       source.height == source.original_height) {
-    for(i=x1; i<x2; i++) {
-      for(j=y1; j<y2; j++) {
-        if(source.data[i][j].r != source.transparent.r &&
-            source.data[i][j].g != source.transparent.g &&
-            source.data[i][j].b != source.transparent.b) {
-          struct Pixel color = source.data[i][j];
-          color.r = min(color.r, color.r - (255-(source.r)));
-          color.g = min(color.g, color.g - (255-(source.g)));
-          color.b = min(color.b, color.b - (255-(source.b)));
-
-          setpen(color.r, color.g, color.b, 0, 1);
-          putpixel(i-x1+x_offset, j-y1+y_offset);
-        }
-      }
-    }
+    drawmode=2;
   }
 
-  // Draw size different from original size, use stretched putpixel
-  else {
-    for(i=x1; i<x2; i++) {
-      for(j=y1; j<y2; j++) {
-        if(source.data[i][j].r != source.transparent.r &&
-            source.data[i][j].g != source.transparent.g &&
-            source.data[i][j].b != source.transparent.b) {
-          struct Pixel color = source.data[i][j];
-          color.r = min(color.r, color.r - (255-(source.r)));
-          color.g = min(color.g, color.g - (255-(source.g)));
-          color.b = min(color.b, color.b - (255-(source.b)));
+  for(i=x1; i<x2; i++) {
+    for(j=y1; j<y2; j++) {
+      if(source.data[i][j].r != source.transparent.r &&
+          source.data[i][j].g != source.transparent.g &&
+          source.data[i][j].b != source.transparent.b) {
+        struct Pixel color = source.data[i][j];
+        color.r = min(color.r, color.r - (255-(source.r)));
+        color.g = min(color.g, color.g - (255-(source.g)));
+        color.b = min(color.b, color.b - (255-(source.b)));
 
-          setpen(color.r, color.g, color.b, 0, 1);
+        switch(drawmode) {
+          case 1:
+            setpen(color.r, color.g, color.b, 0, 1);
+            putpixel(i-x1+x_offset, j-y1+y_offset);
+            break;
 
-          // Math to make putpixel_offset use the set width instead of a scale
-          putpixel_offset(i-x1, j-y1,
+          case 2:
+            putpixel_offset(i-x1, j-y1,
               (double)source.width/(double)source.original_width,
               (double)source.height/(double)source.original_height,
               x_offset, y_offset);
+            break;
         }
       }
     }
@@ -203,13 +254,18 @@ void text_draw(Image font, char str[]) {
   text_draw_offset(font, str, 0,0);
 }
 
-// (Manipulation)
-// __  __             _             _       _   _              
-//|  \/  | __ _ _ __ (_)_ __  _   _| | __ _| |_(_) ___  _ __   
-//| |\/| |/ _` | '_ \| | '_ \| | | | |/ _` | __| |/ _ \| '_ \  
-//| |  | | (_| | | | | | |_) | |_| | | (_| | |_| | (_) | | | | 
-//|_|  |_|\__,_|_| |_|_| .__/ \__,_|_|\__,_|\__|_|\___/|_| |_| 
-//                     |_|                                     
+// (image manipulation)
+// ___                             
+//|_ _|_ __ ___   __ _  __ _  ___  
+// | || '_ ` _ \ / _` |/ _` |/ _ \ 
+// | || | | | | | (_| | (_| |  __/ 
+//|___|_| |_| |_|\__,_|\__, |\___| 
+//                     |___/       
+//|  \/  | __ _ _ __ (_)_ __  _   _| | __ _| |_(_) ___  _ __
+//| |\/| |/ _` | '_ \| | '_ \| | | | |/ _` | __| |/ _ \| '_ \
+//| |  | | (_| | | | | | |_) | |_| | | (_| | |_| | (_) | | | |
+//|_|  |_|\__,_|_| |_|_| .__/ \__,_|_|\__,_|\__|_|\___/|_| |_|
+//                     |_|
 //
 Image image_setrgb(Image source, int r, int g, int b) {
   Image new_image = source;
@@ -219,13 +275,19 @@ Image image_setrgb(Image source, int r, int g, int b) {
   return new_image;
 }
 
-// (Loading, creation)
-// _                    _ _              
-//| |    ___   __ _  __| (_)_ __   __ _  
-//| |   / _ \ / _` |/ _` | | '_ \ / _` | 
-//| |__| (_) | (_| | (_| | | | | | (_| | 
-//|_____\___/ \__,_|\__,_|_|_| |_|\__, | 
-//                                |___/  
+// (image loading, creation)
+// ___                             
+//|_ _|_ __ ___   __ _  __ _  ___  
+// | || '_ ` _ \ / _` |/ _` |/ _ \ 
+// | || | | | | | (_| | (_| |  __/ 
+//|___|_| |_| |_|\__,_|\__, |\___| 
+//                     |___/       
+// _                    _ _
+//| |    ___   __ _  __| (_)_ __   __ _
+//| |   / _ \ / _` |/ _` | | '_ \ / _` |
+//| |__| (_) | (_| | (_| | | | | | (_| |
+//|_____\___/ \__,_|\__,_|_|_| |_|\__, |
+//                                |___/
 
 // Allocates a new blank image
 // For use only if you want to manipulate blank images, rather
@@ -242,6 +304,17 @@ Image image_new(Image source, int width, int height) {
   return new_image;
 }
 
+// Frees up the memory used in an image.
+// Don't use to delete global-code images.
+void image_delete(Image source) {
+  int i, j;
+  for (i=0; i<source.original_width; i++) {
+    for(j=0; j<source.original_height; j++) {
+      free(source.data[i][j]);
+    }
+  }
+}
+
 // Sets up font options for an Image struct
 Image make_font(Image source, int num_chars, char first_char) {
   Image new_image = source;
@@ -250,72 +323,67 @@ Image make_font(Image source, int num_chars, char first_char) {
   return new_image;
 }
 
-// Frees up the memory used in an image.
-/* DISABLED
-void image_delete(Image source) {
-  int i, j;
-  for (i=0; i<source.original_width; i++) {
-  for(j=0; j<source.original_height; j++) {
-    free(source.data[i][j]);
-  }
-  }
-}
-*/
-
 // Checks image file extension to decide what image loader
 // to use. I.E. a ".bmp" extension will use the BMP24/32 loader.
-//
-// Currently, this function doesn't decide by extension, only has BMP24/32 (only tested 24)
 Image image_load(char source[]) {
-  int bmp_bitrate, padding;
-  int bmp_header[64], i,j, empty_bit;
-  FILE*bmp_file=fopen(source, "r+b");
   Image new_image;
 
-  for(i=0; i<64; i++) {
-    bmp_header[i]=fgetc(bmp_file);
-  }
-  if(bmp_header[0]==66 && bmp_header[1]==77) {
-    char temp[4];
-    new_image.width = bmp_header[18]+bmp_header[19]*256;
-    new_image.height = bmp_header[22]+bmp_header[23]*256;
-    bmp_bitrate = bmp_header[28];
-    padding = new_image.width % 4;
+  // BMP LOADER
+  if (strend(source, ".bmp")) {
+    int bmp_bitrate, padding;
+    int bmp_header[64], i,j, empty_bit;
+    file*bmp_file=fopen(source, "r+b");
 
-    new_image.original_width = new_image.width;
-    new_image.original_height = new_image.height;
-    strcpy(new_image.name, source);
-    new_image.transparent.r = 0;
-    new_image.transparent.g = 0;
-    new_image.transparent.b = 0;
-    new_image.r = 255;
-    new_image.g = 255;
-    new_image.b = 255;
-        
-    new_image.data = (struct Pixel**)malloc(new_image.width * sizeof(struct Pixel*));
-    for (i=0; i<new_image.width; i++) {
-      new_image.data[i] = (struct Pixel*)malloc(new_image.height * sizeof(struct Pixel));
+    for(i=0; i<64; i++) {
+      bmp_header[i]=fgetc(bmp_file);
     }
+    if(bmp_header[0]==66 && bmp_header[1]==77) {
+      char temp[4];
+      new_image.width = bmp_header[18]+bmp_header[19]*256;
+      new_image.height = bmp_header[22]+bmp_header[23]*256;
+      bmp_bitrate = bmp_header[28];
+      padding = new_image.width % 4;
 
-    fseek(bmp_file, bmp_header[10], SEEK_SET);
+      new_image.original_width = new_image.width;
+      new_image.original_height = new_image.height;
+      strcpy(new_image.name, source);
+      new_image.transparent.r = 0;
+      new_image.transparent.g = 0;
+      new_image.transparent.b = 0;
+      new_image.r = 255;
+      new_image.g = 255;
+      new_image.b = 255;
 
-    for(i=new_image.height-1; i>=0; i--)
-    {
-      for(j=0; j<new_image.width; j++)
+      new_image.data = (struct pixel**)malloc(new_image.width * sizeof(struct pixel*));
+      for (i=0; i<new_image.width; i++) {
+        new_image.data[i] = (struct pixel*)malloc(new_image.height * sizeof(struct pixel));
+      }
+
+      fseek(bmp_file, bmp_header[10], seek_set);
+
+      for(i=new_image.height-1; i>=0; i--)
       {
-        new_image.data[j][i].b = fgetc(bmp_file);
-        new_image.data[j][i].g = fgetc(bmp_file);
-        new_image.data[j][i].r = fgetc(bmp_file);
-        if(bmp_bitrate==32) {
-          // Skip extra bit
-          fgetc(bmp_file);
+        for(j=0; j<new_image.width; j++)
+        {
+          new_image.data[j][i].b = fgetc(bmp_file);
+          new_image.data[j][i].g = fgetc(bmp_file);
+          new_image.data[j][i].r = fgetc(bmp_file);
+          if(bmp_bitrate==32) {
+            // skip extra bit
+            fgetc(bmp_file);
+          }
+        }
+        if(padding != 0) {
+          fread(&temp, padding, 1, bmp_file);
         }
       }
-      if(padding != 0) {
-        fread(&temp, padding, 1, bmp_file); 
-      }
     }
+    fclose(bmp_file);
   }
-  fclose(bmp_file);
+
+  // TODO: TGA LOADER
+  else if (strend(source, ".tga")) {
+  }
+
   return new_image;
 }
