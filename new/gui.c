@@ -1,3 +1,5 @@
+// (These comments are basically wrong, and unformatted. Ignore them)
+
 // NAME:     LYU CANVAS API
 //
 // AUTHOR:   DarkParadox
@@ -137,7 +139,6 @@ void do_gui(char* type) { // Do-all GUI function.
         switch (gui_elements[animpos].type) { // Causes crash if it isn't set up...
             default: // Invalid setup
                 erase(0,0,0,0);
-                drawText("GUI ERROR: Invalid Typing"); // Warn
                 break;
 
             case 0: // Set up as button
