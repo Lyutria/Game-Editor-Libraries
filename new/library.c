@@ -1,5 +1,9 @@
-// Images, etc. Library.
-// Currently... Full of memory leaks.
+//  ____ _____      _     _ _          
+// / ___| ____|    | |   (_) |__  ___  
+//| |  _|  _| _____| |   | | '_ \/ __| 
+//| |_| | |__|_____| |___| | |_) \__ \ 
+// \____|_____|    |_____|_|_.__/|___/ 
+//                                     
 
 #define true 1
 #define false 0
@@ -9,6 +13,14 @@ typedef unsigned short int Word;
 typedef Byte bool;
 typedef Byte boolean;
 typedef char* string;
+
+// (structs)
+// ____  _                   _        
+/// ___|| |_ _ __ _   _  ___| |_ ___  
+//\___ \| __| '__| | | |/ __| __/ __| 
+// ___) | |_| |  | |_| | (__| |_\__ \ 
+//|____/ \__|_|   \__,_|\___|\__|___/ 
+//                                    
 
 // Pixel struct, not meant to be used normally.
 struct Pixel {
@@ -34,6 +46,10 @@ typedef struct image_struct {
   // The images current display width/height.
   int width;
   int height;
+
+  // Holds angle of rotation, currently only supports 90 degree
+  // angles.
+  int angle;
 
   // Font options
   // Number of characters and the ASCII code of the
@@ -61,9 +77,13 @@ typedef struct animation_struct {
   Image* images;
 } Animation;
 
-//
-// IMAGE DRAWING
-//
+// (Drawing)
+// ____                     _              
+//|  _ \ _ __ __ ___      _(_)_ __   __ _  
+//| | | | '__/ _` \ \ /\ / / | '_ \ / _` | 
+//| |_| | | | (_| |\ V  V /| | | | | (_| | 
+//|____/|_|  \__,_| \_/\_/ |_|_| |_|\__, | 
+//                                  |___/  
 
 // Draws a pixel to a specific scale on a similarly scaled XY grid.
 void putpixel_stretch(double x_pos, double y_pos, double x_scale, double y_scale) {
@@ -183,10 +203,14 @@ void text_draw(Image font, char str[]) {
   text_draw_offset(font, str, 0,0);
 }
 
+// (Manipulation)
+// __  __             _             _       _   _              
+//|  \/  | __ _ _ __ (_)_ __  _   _| | __ _| |_(_) ___  _ __   
+//| |\/| |/ _` | '_ \| | '_ \| | | | |/ _` | __| |/ _ \| '_ \  
+//| |  | | (_| | | | | | |_) | |_| | | (_| | |_| | (_) | | | | 
+//|_|  |_|\__,_|_| |_|_| .__/ \__,_|_|\__,_|\__|_|\___/|_| |_| 
+//                     |_|                                     
 //
-// IMAGE MANIPULATION
-//
-
 Image image_setrgb(Image source, int r, int g, int b) {
   Image new_image = source;
   new_image.r = r;
@@ -195,10 +219,13 @@ Image image_setrgb(Image source, int r, int g, int b) {
   return new_image;
 }
 
-
-//
-// IMAGE CREATION / LOADING
-//
+// (Loading, creation)
+// _                    _ _              
+//| |    ___   __ _  __| (_)_ __   __ _  
+//| |   / _ \ / _` |/ _` | | '_ \ / _` | 
+//| |__| (_) | (_| | (_| | | | | | (_| | 
+//|_____\___/ \__,_|\__,_|_|_| |_|\__, | 
+//                                |___/  
 
 // Allocates a new blank image
 // For use only if you want to manipulate blank images, rather
