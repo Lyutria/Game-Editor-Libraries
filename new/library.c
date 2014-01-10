@@ -31,7 +31,7 @@
 // often).
 
 #define DEBUG_STACK_SIZE 10
-#define DEBUG_ENABLED 0
+#define DEBUG_ENABLED 1
 
 struct {
   char active;
@@ -247,7 +247,7 @@ void image_draw_section(Image source, int x_1, int y_1, int x_2, int y_2, int x_
       if(source.data[i][j].r != source.transparent.r &&
          source.data[i][j].g != source.transparent.g &&
          source.data[i][j].b != source.transparent.b) {
-        Pixel color = source.data[i][j];
+        struct Pixel color = source.data[i][j];
         setpen(color.r, color.g, color.b, 0, 1);
 
         switch(drawmode) {
