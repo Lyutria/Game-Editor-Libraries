@@ -5,24 +5,61 @@
 // \____|_____|    |_____|_|_.__/|___/
 //
 
-// Defines
-#define true 1
-#define false 0
+// ____       _
+//|  _ \  ___| |__  _   _  __ _
+//| | | |/ _ \ '_ \| | | |/ _` |
+//| |_| |  __/ |_) | |_| | (_| |
+//|____/ \___|_.__/ \__,_|\__, |
+//                        |___/
 
-// Typedefs
-typedef unsigned char Byte;
-typedef unsigned short int Word;
-typedef Byte bool;
-typedef Byte boolean;
-typedef char* string;
+// I wrote a relatively verbose debug system for this library.
+// to create a debug monitor (prints out debug messages), do this:
+//  1. Create a new image in global code
+//  2. Set it up as a font.
+//  3. Create a new canvas actor
+//  4. Set the canvas' draw actor to:
+//    draw_manage(my_font)
+//
+//  make sure you KNOW that your font works, I suggest using the
+//  "debug.bmp" font that comes packaged with this library by using
+//  the function:
+//    my_image = make_font(image_load("debug.bmp"), 95, ' ');
+//  TODO: Wait until "production" to package this.
+//
+// Redraw rates are optimized by the function itself, so you don't
+// need to worry about it killing your FPS (unless you debug_push too
+// often).
+
+#define DEBUG_STACK_SIZE 10
+#define DEBUG_ENABLED 0
+
+struct {
+  char active;
+  char redraw;
+  char format[32];
+} debug_options = {DEBUG_ENABLED, 1, "%s: %s"};
+
+typedef struct debug_state {
+  char label[16];
+  void (*call_back)();
+} debug_state;
+
+struct debug_part {
+  debug_state state;
+  char description[64];
+} debug_stack[DEBUG_STACK_SIZE];
+
+debug_state debug_error = {"error", SuspendGame};
+debug_state debug_info  = {"info", NULL};
+debug_state debug_warn  = {"warn", NULL};
 
 // (structs)
-// ___                             
-//|_ _|_ __ ___   __ _  __ _  ___  
-// | || '_ ` _ \ / _` |/ _` |/ _ \ 
-// | || | | | | | (_| | (_| |  __/ 
-//|___|_| |_| |_|\__,_|\__, |\___| 
-//                     |___/       
+// ___
+//|_ _|_ __ ___   __ _  __ _  ___
+// | || '_ ` _ \ / _` |/ _` |/ _ \
+// | || | | | | | (_| | (_| |  __/
+//|___|_| |_| |_|\__,_|\__, |\___|
+//                     |___/
 // ____  _                   _
 /// ___|| |_ _ __ _   _  ___| |_ ___
 //\___ \| __| '__| | | |/ __| __/ __|
@@ -30,116 +67,142 @@ typedef char* string;
 //|____/ \__|_|   \__,_|\___|\__|___/
 //
 
-// RGB pixel struct
 struct Pixel {
-  Byte r,g,b;
+  unsigned char r,g,b;
 };
-// Image containment struct
+
 typedef struct image_struct {
-  // Name of the image, not very important. Assigned to the
-  // directory of the image + file + extension if loaded,
-  // if a "image_new()", declared in-function.
-  char* name;
+  char name[256]; // Path to file from image_load()
 
-  // A pixel containing the color to be considered transparent
-  struct Pixel transparent;
+  struct Pixel transparent; // Undrawn color
 
-  // The width and height of the image that was loaded, used for
-  // calculating x/yscale stretching.
   int original_width;
   int original_height;
-
-  // The images current display width/height.
   int width;
   int height;
 
-  // Holds angle of rotation, currently only supports 90 degree
-  // angles.
-  int angle;
+  int angle; // Draw angle (only 90deg increments)
 
-  // Holds the scale to draw the text at, seperate from width/height
-  // scaling
-  double scale;
+  double scale; // Draw scale (1 is default)
 
-  //
-  // Number of characters and the ASCII code of the
-  // first character.
-  char characters;
-  char first_character;
+  char characters; // # characters in font
+  char first_character; // First char in font
 
-  // Set these colors like you would a normal GE actor
-  char r,g,b;
+  short int r,g,b;
 
-  // Stores a 2D array containing the image data dynamically
   struct Pixel** data;
 } Image;
-// Animation struct,
+
 typedef struct animation_struct {
-  // Number of frames
-  int frames;
-
-  // FPS to be played at
+  int num_frames;
   int fps;
-
-  // List of images
   Image* images;
 } Animation;
 
 // (Tools)
-// _____           _      
-//|_   _|__   ___ | |___  
-//  | |/ _ \ / _ \| / __| 
-//  | | (_) | (_) | \__ \ 
-//  |_|\___/ \___/|_|___/ 
-//                        
+// _____           _
+//|_   _|__   ___ | |___
+//  | |/ _ \ / _ \| / __|
+//  | | (_) | (_) | \__ \
+//  |_|\___/ \___/|_|___/
+//
 // Collection of functions for generic usage
 
-char * strInsert (char* txt, int pos, char* in) {
-    char firsthalf[255], secondhalf[255];
+// Pushes data unto the debug stack
+void debug_push(debug_state state, char source[]) {
+  if(debug_options.active) {
     int i;
-    strncpy(firsthalf, txt, pos);
-
-    // And now loop through the rest and add it to
-    // secondhalf
-    for (i=0; i<(strlen(txt)-pos); i++) {
-        secondhalf[i] = txt[i+pos];
+    if(strlen(source) > 64) {
+      debug_push(debug_warn, "debug_push too long");
     }
-
-    // Append the character to firsthalf
-    strcat(firsthalf, in);
-
-    // Reappend secondhalf
-    strcat(firsthalf, secondhalf);
-
-    // And make our text the new variable.
-    strcpy(txt, firsthalf);
-    return txt;
+    else {
+      struct debug_part new_part;
+      for(i=DEBUG_STACK_SIZE-1; i>0; i--) {
+        debug_stack[i] = debug_stack[i-1];
+      }
+      strcpy(new_part.description, source);
+      new_part.state = state;
+      debug_stack[0] = new_part;
+      debug_options.redraw=1;
+    }
+  }
 }
 
-// Checks if SOURCE ends with CHECK
-int strend(char*source, char*check) {
-   char*temp1;
-   strncpy(temp1, source, strlen(source)-strlen(check));
-   strcat(temp1, check);
-   if(strcmp(source, temp1)==0) return 1;
-   else return 0;
+int random(int lower, int upper) {
+    int v1 = max(upper, lower), v2 = min(upper, lower);
+    return (rand(v1-v2)+v2);
 }
 
-// Checks if SOURCE begins with CHECK
-int strbeg(char*source, char*check) {
-    char*temp1;
-    strncpy(temp1, source, strlen(check));
-    if(!strcmp(temp1, check)) return 1;
-    else return 0;
+char* int_to_str(int val) {
+    // Creates a string using sprintf
+    char buf[128];
+    sprintf(buf, "%d", val);
+    return buf;
+}
+
+char* float_to_str(float val) {
+    // Creates a string using sprintf
+    char buf[128];
+    sprintf(buf, "%f", val);
+    return buf;
+}
+
+void strinsert(char* dest, int pos, char* in) {
+  char firsthalf[255], secondhalf[255];
+  int i;
+
+  strncpy(firsthalf, dest, pos);
+
+  for (i=0; i<(strlen(dest)-pos); i++) {
+      secondhalf[i] = dest[i+pos];
+  }
+
+  strcat(firsthalf, in);
+  strcat(firsthalf, secondhalf);
+  strcpy(dest, firsthalf);
+}
+
+int strend(char source[], char check[]) {
+  int i;
+  for(i=0; i<strlen(check); i++) {
+    if(source[strlen(source)-strlen(check)+i] != check[i]) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
+int strbegin(char source[], char check[]) {
+  int i;
+  for(i=0; i<strlen(check); i++) {
+    if(source[i] != check[i]) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
+char chrupper(char source) {
+  if (source >= 'a' && source <= 'z') {
+    return source - ('a' - 'A');
+  }
+  return source;
+}
+
+char chrlower(char source) {
+  if(source >= 'A' && source <= 'Z') {
+    return source + ('a' - 'A');
+  }
+  return source;
 }
 
 // (image drawing)
-// ___                             
-//|_ _|_ __ ___   __ _  __ _  ___  
-// | || '_ ` _ \ / _` |/ _` |/ _ \ 
-// | || | | | | | (_| | (_| |  __/ 
-//|___|_| |_| |_|\__,_|\__, |\___| 
-//                     |___/       
+// ___
+//|_ _|_ __ ___   __ _  __ _  ___
+// | || '_ ` _ \ / _` |/ _` |/ _ \
+// | || | | | | | (_| | (_| |  __/
+//|___|_| |_| |_|\__,_|\__, |\___|
+//                     |___/
 // ____                     _
 //|  _ \ _ __ __ ___      _(_)_ __   __ _
 //| | | | '__/ _` \ \ /\ / / | '_ \ / _` |
@@ -147,7 +210,6 @@ int strbeg(char*source, char*check) {
 //|____/|_|  \__,_| \_/\_/ |_|_| |_|\__, |
 //                                  |___/
 
-// Draws a pixel to a specific scale on a similarly scaled XY grid.
 void putpixel_stretch(double x_pos, double y_pos, double x_scale, double y_scale) {
   double i;
   for (i=0; i<x_scale; i++) {
@@ -156,7 +218,6 @@ void putpixel_stretch(double x_pos, double y_pos, double x_scale, double y_scale
   }
 }
 
-// Same as putpixel_stretch, but includes a non-scaled XY offset
 void putpixel_offset(double x_pos, double y_pos, double x_scale, double y_scale, int x_offset, int y_offset) {
   double i;
   for (i=0; i<x_scale; i++) {
@@ -165,35 +226,28 @@ void putpixel_offset(double x_pos, double y_pos, double x_scale, double y_scale,
   }
 }
 
-// This function draws any section of an IMAGE
-// struct given several different properties.
-//
-// If the structs width and height have been modified, we draw it
-// using a special pixel-stretching function, instead of putpixel();
-//
-// The RGB of each pixel is also modified by the sources r, g, and b members.
-// This functionality seems to be a bit broken right now, though
-void subimage_draw(Image source, int x_1, int y_1, int x_2, int y_2, int x_offset, int y_offset) {
+// TODO: implement RGB modifiers using source.r/g/b
+//       previous implementation broke.
+void image_draw_section(Image source, int x_1, int y_1, int x_2, int y_2, int x_offset, int y_offset) {
   int i, j;
   int x1 = min(x_1, x_2), x2 = max(x_1, x_2);
   int y1 = min(y_1, y_2), y2 = max(y_1, y_2);
   int drawmode = 1;
+  
+  debug_state debug_draw = {"draw", NULL};
+  debug_push(debug_draw, source.name);
 
-  // Determine if we need to use a scaled putpixel function
   if(source.width == source.original_width &&
       source.height == source.original_height) {
-    drawmode=2;
+    drawmode = 2;
   }
 
   for(i=x1; i<x2; i++) {
     for(j=y1; j<y2; j++) {
       if(source.data[i][j].r != source.transparent.r &&
-          source.data[i][j].g != source.transparent.g &&
-          source.data[i][j].b != source.transparent.b) {
-        struct Pixel color = source.data[i][j];
-        color.r = min(color.r, color.r - (255-(source.r)));
-        color.g = min(color.g, color.g - (255-(source.g)));
-        color.b = min(color.b, color.b - (255-(source.b)));
+         source.data[i][j].g != source.transparent.g &&
+         source.data[i][j].b != source.transparent.b) {
+        Pixel color = source.data[i][j];
         setpen(color.r, color.g, color.b, 0, 1);
 
         switch(drawmode) {
@@ -213,19 +267,23 @@ void subimage_draw(Image source, int x_1, int y_1, int x_2, int y_2, int x_offse
   }
 }
 
-// This function simply calls subimage_draw, but with
-// the entire image selected.
 void image_draw(Image source, int x_offset, int y_offset) {
-  subimage_draw(source, 0,0, source.original_width, source.original_height, x_offset, y_offset);
+  image_draw_section(source, 0,0, source.original_width, source.original_height, x_offset, y_offset);
 }
 
-// Takes image struct to use as font and draws text based
-// upon it with an XY offset
+// TODO: Add more styling methods, I.E. color code '\a898', tabs '\t', etc.
 void text_draw_offset(Image font, char str[], int x_offset, int y_offset) {
   int x_pos=0, y_pos=0, i;
   int char_width, char_height;
+  int reset_debug=0;
 
-  // Figure out font properties
+  if(debug_options.active) {
+    debug_state debug_write = {"write", NULL};
+    debug_push(debug_write, font.name);
+    debug_options.active=0;
+    reset_debug=1;
+  }
+
   char_width = font.original_width / font.characters;
   char_height = font.original_height;
 
@@ -238,7 +296,7 @@ void text_draw_offset(Image font, char str[], int x_offset, int y_offset) {
 
       default:
         // Any normal letter
-        subimage_draw(font,
+        image_draw_section(font,
             ((str[i]-font.first_character)*char_width),0,
             ((str[i]-font.first_character)*char_width)+char_width,char_height,
             (x_pos*char_width)+x_offset,
@@ -247,26 +305,57 @@ void text_draw_offset(Image font, char str[], int x_offset, int y_offset) {
         break;
     }
   }
+
+  if(reset_debug) debug_options.active = 1;
 }
 
-// Calls text_draw_offset with no offset
 void text_draw(Image font, char str[]) {
   text_draw_offset(font, str, 0,0);
 }
 
+// This is here instead of drawing debug by hand because
+// the drawing commands call debug pushes, making it an infinite loop
+// this auto-handles debug activation / deactivation for you.
+//
+// Of course, if your image font is broken, this won't work.
+void debug_manage(Image font) {
+  if(debug_options.active && debug_options.redraw) {
+    int i;
+    debug_options.active = 0;
+    erase(0,0,0,0);
+
+    for(i=0; i<DEBUG_STACK_SIZE; i++) {
+      char buf[80];
+      sprintf(buf, debug_options.format, debug_stack[i].state.label, debug_stack[i].description);
+      text_draw_offset(font, buf, 0, i*font.height);
+      if(debug_stack[i].state.call_back != NULL) debug_stack[i].state.call_back();
+    }
+
+    debug_options.redraw = 0;
+    debug_options.active = 1;
+  }
+}
+
 // (image manipulation)
-// ___                             
-//|_ _|_ __ ___   __ _  __ _  ___  
-// | || '_ ` _ \ / _` |/ _` |/ _ \ 
-// | || | | | | | (_| | (_| |  __/ 
-//|___|_| |_| |_|\__,_|\__, |\___| 
-//                     |___/       
+// ___
+//|_ _|_ __ ___   __ _  __ _  ___
+// | || '_ ` _ \ / _` |/ _` |/ _ \
+// | || | | | | | (_| | (_| |  __/
+//|___|_| |_| |_|\__,_|\__, |\___|
+// __  __             _|___/        _       _   _
 //|  \/  | __ _ _ __ (_)_ __  _   _| | __ _| |_(_) ___  _ __
 //| |\/| |/ _` | '_ \| | '_ \| | | | |/ _` | __| |/ _ \| '_ \
 //| |  | | (_| | | | | | |_) | |_| | | (_| | |_| | (_) | | | |
 //|_|  |_|\__,_|_| |_|_| .__/ \__,_|_|\__,_|\__|_|\___/|_| |_|
 //                     |_|
 //
+
+// IMPORTANT-ish:
+// There's not many functions in this section. Why?
+// I found it more useful to have code function in a lossless-state. All the manipulation is
+// truely handled during the draw-state using variables from the Image struct (I.E. Angle, rgb, scale).
+// This is so the image can be easily modified on the fly with code, and far more readable.
+
 Image image_setrgb(Image source, int r, int g, int b) {
   Image new_image = source;
   new_image.r = r;
@@ -276,12 +365,12 @@ Image image_setrgb(Image source, int r, int g, int b) {
 }
 
 // (image loading, creation)
-// ___                             
-//|_ _|_ __ ___   __ _  __ _  ___  
-// | || '_ ` _ \ / _` |/ _` |/ _ \ 
-// | || | | | | | (_| | (_| |  __/ 
-//|___|_| |_| |_|\__,_|\__, |\___| 
-//                     |___/       
+// ___
+//|_ _|_ __ ___   __ _  __ _  ___
+// | || '_ ` _ \ / _` |/ _` |/ _ \
+// | || | | | | | (_| | (_| |  __/
+//|___|_| |_| |_|\__,_|\__, |\___|
+//                     |___/
 // _                    _ _
 //| |    ___   __ _  __| (_)_ __   __ _
 //| |   / _ \ / _` |/ _` | | '_ \ / _` |
@@ -289,23 +378,24 @@ Image image_setrgb(Image source, int r, int g, int b) {
 //|_____\___/ \__,_|\__,_|_|_| |_|\__, |
 //                                |___/
 
-// Allocates a new blank image
-// For use only if you want to manipulate blank images, rather
-// than load images from files.
+// Allocates space for an image
+// Live loading might cause memory leaks, not properly tested.
 Image image_new(Image source, int width, int height) {
   int i;
   Image new_image;
+  new_image.width = width;
+  new_image.height = height;
 
-  new_image.data = (struct Pixel**)malloc(width * sizeof(struct Pixel*));
-  for (i=0; i<width; i++) {
-    new_image.data[i] = (struct Pixel*)malloc(height * sizeof(struct Pixel));
+  new_image.data = (struct Pixel**)malloc(new_image.width * sizeof(struct Pixel*));
+  for (i=0; i<new_image.width; i++) {
+    new_image.data[i] = (struct Pixel*)malloc(new_image.height * sizeof(struct Pixel));
   }
 
+  debug_push(debug_info, "new image allocated");
   return new_image;
 }
 
-// Frees up the memory used in an image.
-// Don't use to delete global-code images.
+/*
 void image_delete(Image source) {
   int i, j;
   for (i=0; i<source.original_width; i++) {
@@ -313,9 +403,9 @@ void image_delete(Image source) {
       free(source.data[i][j]);
     }
   }
-}
+}*/
 
-// Sets up font options for an Image struct
+// Sets up an image's font values
 Image make_font(Image source, int num_chars, char first_char) {
   Image new_image = source;
   new_image.characters = num_chars;
@@ -323,20 +413,29 @@ Image make_font(Image source, int num_chars, char first_char) {
   return new_image;
 }
 
-// Checks image file extension to decide what image loader
-// to use. I.E. a ".bmp" extension will use the BMP24/32 loader.
+// At the cost of efficiency, I decided to compile all the image
+// loading functions into image_load(). This shouldn't hamper the
+// readability of code at all, and the loader is decided by file extension.
+//
+// This may make it more difficult to -write- code, since you don't know what
+// file extensions are supported, however.
+//
+// TODO: Only BMP loading (24/32bit) is active, make more.
+//       Specifically TGA.
 Image image_load(char source[]) {
   Image new_image;
+  debug_state debug_load = {"load", NULL};
 
   // BMP LOADER
   if (strend(source, ".bmp")) {
     int bmp_bitrate, padding;
     int bmp_header[64], i,j, empty_bit;
-    file*bmp_file=fopen(source, "r+b");
+    FILE*bmp_file=fopen(source, "r+b");
 
     for(i=0; i<64; i++) {
       bmp_header[i]=fgetc(bmp_file);
     }
+
     if(bmp_header[0]==66 && bmp_header[1]==77) {
       char temp[4];
       new_image.width = bmp_header[18]+bmp_header[19]*256;
@@ -354,17 +453,15 @@ Image image_load(char source[]) {
       new_image.g = 255;
       new_image.b = 255;
 
-      new_image.data = (struct pixel**)malloc(new_image.width * sizeof(struct pixel*));
+      new_image.data = (struct Pixel**)malloc(new_image.width * sizeof(struct Pixel*));
       for (i=0; i<new_image.width; i++) {
-        new_image.data[i] = (struct pixel*)malloc(new_image.height * sizeof(struct pixel));
+        new_image.data[i] = (struct Pixel*)malloc(new_image.height * sizeof(struct Pixel));
       }
 
-      fseek(bmp_file, bmp_header[10], seek_set);
+      fseek(bmp_file, bmp_header[10], SEEK_SET);
 
-      for(i=new_image.height-1; i>=0; i--)
-      {
-        for(j=0; j<new_image.width; j++)
-        {
+      for(i=new_image.height-1; i>=0; i--) {
+        for(j=0; j<new_image.width; j++) {
           new_image.data[j][i].b = fgetc(bmp_file);
           new_image.data[j][i].g = fgetc(bmp_file);
           new_image.data[j][i].r = fgetc(bmp_file);
@@ -373,17 +470,11 @@ Image image_load(char source[]) {
             fgetc(bmp_file);
           }
         }
-        if(padding != 0) {
-          fread(&temp, padding, 1, bmp_file);
-        }
+        if(padding != 0) fread(&temp, padding, 1, bmp_file);
       }
     }
     fclose(bmp_file);
+    debug_push(debug_load, source);
   }
-
-  // TODO: TGA LOADER
-  else if (strend(source, ".tga")) {
-  }
-
   return new_image;
 }
