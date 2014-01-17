@@ -265,68 +265,58 @@ Image make_font(Image source, int num_chars, char first_char) {
   return new_image;
 }
 
-// At the cost of efficiency, I decided to compile all the image
-// loading functions into image_load(). This shouldn't hamper the
-// readability of code at all, and the loader is decided by file extension.
-//
-// This may make it more difficult to -write- code, since you don't know what
-// file extensions are supported, however.
-//
 // TODO: Only BMP loading (24/32bit) is active, make more.
 //       Specifically TGA.
-Image image_load(char source[]) {
+Image bmp_load(char source[]) {
   Image new_image;
   debug_state debug_load = {"load", NULL};
 
-  // BMP LOADER
-  if (strend(source, ".bmp")) {
-    int bmp_bitrate, padding;
-    int bmp_header[64], i,j, empty_bit;
-    FILE*bmp_file=fopen(source, "r+b");
+  int bmp_bitrate, padding;
+  int bmp_header[64], i,j, empty_bit;
+  FILE*bmp_file=fopen(source, "r+b");
 
-    for(i=0; i<64; i++) {
-      bmp_header[i]=fgetc(bmp_file);
-    }
-
-    if(bmp_header[0]==66 && bmp_header[1]==77) {
-      char temp[4];
-      new_image.width = bmp_header[18]+bmp_header[19]*256;
-      new_image.height = bmp_header[22]+bmp_header[23]*256;
-      bmp_bitrate = bmp_header[28];
-      padding = new_image.width % 4;
-
-      new_image.original_width = new_image.width;
-      new_image.original_height = new_image.height;
-      strcpy(new_image.name, source);
-      new_image.transparent.r = 0;
-      new_image.transparent.g = 0;
-      new_image.transparent.b = 0;
-      new_image.r = 255;
-      new_image.g = 255;
-      new_image.b = 255;
-
-      new_image.data = (struct Pixel**)malloc(new_image.width * sizeof(struct Pixel*));
-      for (i=0; i<new_image.width; i++) {
-        new_image.data[i] = (struct Pixel*)malloc(new_image.height * sizeof(struct Pixel));
-      }
-
-      fseek(bmp_file, bmp_header[10], SEEK_SET);
-
-      for(i=new_image.height-1; i>=0; i--) {
-        for(j=0; j<new_image.width; j++) {
-          new_image.data[j][i].b = fgetc(bmp_file);
-          new_image.data[j][i].g = fgetc(bmp_file);
-          new_image.data[j][i].r = fgetc(bmp_file);
-          if(bmp_bitrate==32) {
-            // skip extra bit
-            fgetc(bmp_file);
-          }
-        }
-        if(padding != 0) fread(&temp, padding, 1, bmp_file);
-      }
-    }
-    fclose(bmp_file);
-    debug_push(debug_load, source);
+  for(i=0; i<64; i++) {
+    bmp_header[i]=fgetc(bmp_file);
   }
+
+  if(bmp_header[0]==66 && bmp_header[1]==77) {
+    char temp[4];
+    new_image.width = bmp_header[18]+bmp_header[19]*256;
+    new_image.height = bmp_header[22]+bmp_header[23]*256;
+    bmp_bitrate = bmp_header[28];
+    padding = new_image.width % 4;
+
+    new_image.original_width = new_image.width;
+    new_image.original_height = new_image.height;
+    strcpy(new_image.name, source);
+    new_image.transparent.r = 0;
+    new_image.transparent.g = 0;
+    new_image.transparent.b = 0;
+    new_image.r = 255;
+    new_image.g = 255;
+    new_image.b = 255;
+
+    new_image.data = (struct Pixel**)malloc(new_image.width * sizeof(struct Pixel*));
+    for (i=0; i<new_image.width; i++) {
+      new_image.data[i] = (struct Pixel*)malloc(new_image.height * sizeof(struct Pixel));
+    }
+
+    fseek(bmp_file, bmp_header[10], SEEK_SET);
+
+    for(i=new_image.height-1; i>=0; i--) {
+      for(j=0; j<new_image.width; j++) {
+        new_image.data[j][i].b = fgetc(bmp_file);
+        new_image.data[j][i].g = fgetc(bmp_file);
+        new_image.data[j][i].r = fgetc(bmp_file);
+        if(bmp_bitrate==32) {
+          // skip extra bit
+          fgetc(bmp_file);
+        }
+      }
+      if(padding != 0) fread(&temp, padding, 1, bmp_file);
+    }
+  }
+  fclose(bmp_file);
+  debug_push(debug_load, source);
   return new_image;
 }

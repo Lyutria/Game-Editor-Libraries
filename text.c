@@ -27,6 +27,55 @@ typedef struct textfile {
 //|_|   \__,_|_| |_|\___|\__|_|\___/|_| |_|___/
 //
 
+char* int_to_str(int val) {
+    // Creates a string using sprintf
+    char buf[128];
+    sprintf(buf, "%d", val);
+    return buf;
+}
+
+char* float_to_str(float val) {
+    // Creates a string using sprintf
+    char buf[128];
+    sprintf(buf, "%f", val);
+    return buf;
+}
+
+void strinsert(char* dest, int pos, char* in) {
+  char firsthalf[255], secondhalf[255];
+  int i;
+
+  strncpy(firsthalf, dest, pos);
+
+  for (i=0; i<(strlen(dest)-pos); i++) {
+      secondhalf[i] = dest[i+pos];
+  }
+
+  strcat(firsthalf, in);
+  strcat(firsthalf, secondhalf);
+  strcpy(dest, firsthalf);
+}
+
+int strend(char source[], char check[]) {
+  int i;
+  for(i=0; i<strlen(check); i++) {
+    if(source[strlen(source)-strlen(check)+i] != check[i]) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
+int strbegin(char source[], char check[]) {
+  int i;
+  for(i=0; i<strlen(check); i++) {
+    if(source[i] != check[i]) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
 char chrupper(char source) {
   if (source >= 'a' && source <= 'z') {
     return source - ('a' - 'A');
