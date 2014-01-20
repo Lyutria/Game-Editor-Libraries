@@ -1,5 +1,6 @@
 // THIS FILE IS REQUIRED
 // FOR THE OTHER FILES.
+// (BECAUSE DEBUG SYSTEM)
 //
 // EACH FILE IN THIS LIBRARY LISTS
 // THE OTHER FILES IT REQUIRES AT
@@ -17,6 +18,8 @@
 //| |  | |/ ___ \ | || |\  |
 //|_|  |_/_/   \_\___|_| \_|
 //
+
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
 
 // ____       _
 //|  _ \  ___| |__  _   _  __ _
@@ -53,7 +56,7 @@ struct {
 
 typedef struct debug_state {
   char label[16];
-  void (*call_back)();
+  void (*call)();
 } debug_state;
 
 struct debug_part {

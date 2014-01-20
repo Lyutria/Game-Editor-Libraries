@@ -2,12 +2,6 @@
 // > main.c
 
 // (structs)
-// ___
-//|_ _|_ __ ___   __ _  __ _  ___
-// | || '_ ` _ \ / _` |/ _` |/ _ \
-// | || | | | | | (_| | (_| |  __/
-//|___|_| |_| |_|\__,_|\__, |\___|
-//                     |___/
 // ____  _                   _
 /// ___|| |_ _ __ _   _  ___| |_ ___
 //\___ \| __| '__| | | |/ __| __/ __|
@@ -179,7 +173,7 @@ void debug_manage(Image font) {
       char buf[80];
       sprintf(buf, debug_options.format, debug_stack[i].state.label, debug_stack[i].description);
       text_draw_offset(font, buf, 0, i*font.height);
-      if(debug_stack[i].state.call_back != NULL) debug_stack[i].state.call_back();
+      if(debug_stack[i].state.call != NULL) debug_stack[i].state.call();
     }
 
     debug_options.redraw = 0;

@@ -1,12 +1,7 @@
 // PRE-REQUISITES:
 // > main.c
 
-// (text structs)
-// _____         _
-//|_   _|____  _| |_
-//  | |/ _ \ \/ / __|
-//  | |  __/>  <| |_
-//  |_|\___/_/\_\\__|
+// (structs)
 // ____  _                   _
 /// ___|| |_ _ __ _   _  ___| |_ ___
 //\___ \| __| '__| | | |/ __| __/ __|
@@ -14,11 +9,11 @@
 //|____/ \__|_|   \__,_|\___|\__|___/
 //
 
-typedef struct textfile {
+typedef struct TextFile {
   char name[64];
   char** text;
   int lines;
-} textfile;
+} TextFile;
 
 // _____                 _   _
 //|  ___|   _ _ __   ___| |_(_) ___  _ __  ___
@@ -67,9 +62,7 @@ int strend(char source[], char check[]) {
 }
 
 int strbegin(char source[], char check[]) {
-  int i;
-  for(i=0; i<strlen(check); i++) {
-    if(source[i] != check[i]) {
+  int i; for(i=0; i<strlen(check); i++) { if(source[i] != check[i]) {
       return 0;
     }
   }
