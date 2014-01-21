@@ -1,3 +1,7 @@
+// CURRENTLY UNUSABLE DUE TO BUGS
+// IN GAME-EDITOR.
+// Will attempt to find a workaround.
+
 // PRE-REQUISITES:
 // > main.c
 
