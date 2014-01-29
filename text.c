@@ -11,7 +11,7 @@
 
 typedef struct TextFile {
   char name[64];
-  char** text;
+  char* text;
   int lines;
 } TextFile;
 
@@ -81,4 +81,37 @@ char chrlower(char source) {
     return source + ('a' - 'A');
   }
   return source;
+}
+
+// _____ _ _
+//|  ___(_) | ___
+//| |_  | | |/ _ \
+//|  _| | | |  __/
+//|_|   |_|_|\___|
+//
+
+TextFile text_load(char filename[]) {
+  TextFile result;
+  FILE *file = fopen(filename, "r");
+  int cur_line;
+  char ch;
+  strcpy(result.name, filename);
+
+	if(file == NULL) return result;
+
+  // Goes over the text file twice,
+  // this hurts speed, but it's the only
+  // way to practically set the malloc
+  // size that the dynamic array needs
+  // that I know of.
+
+	while((ch = fgetc(file)) != EOF) {
+		if(c == '\n') result.lines++;
+  }
+	if(c != '\n') result.lines++;
+
+  fseek(file, 0, SEEK_SET);
+
+  fclose(file);
+  return result;
 }

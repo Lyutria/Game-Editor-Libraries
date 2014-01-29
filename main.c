@@ -52,10 +52,17 @@ struct {
   char active;
   char redraw;
   char format[32];
-} debug_options = {DEBUG_ENABLED, 1, "%s: %s"};
+} debug_options = {DEBUG_ENABLED, 1, "[%d] %s: %s"};
+// Some of the format styles you can try:
+// "[%d] %s: %s" (Basic) (default)
+// "%d-%s: %s"   (Minimal)
+// "[%d:%s] %s"  ("Squared off")
+// "[%d:%s]> %s" ("Verbose")
+// "%d@%s:$ %s"  ("Bash")
 
 typedef struct debug_state {
   char label[16];
+  int priority;
   void (*call)();
 } debug_state;
 
@@ -64,9 +71,14 @@ struct debug_part {
   char description[64];
 } debug_stack[DEBUG_STACK_SIZE];
 
-debug_state debug_error = {"error", SuspendGame};
-debug_state debug_info  = {"info", NULL};
-debug_state debug_warn  = {"warn", NULL};
+// 1: Prompt for first half of format
+// 2: Priority, if 1 then bypass disabled debug
+//    i.e. errors will always be pushed.
+// 3: Function with no parameters to call when debug
+//    state is used.
+debug_state debug_error = {"error", 1, SuspendGame};
+debug_state debug_info  = {"info",  0, NULL};
+debug_state debug_warn  = {"warn",  0, NULL};
 
 // (Tools)
 // _____           _
@@ -79,7 +91,7 @@ debug_state debug_warn  = {"warn", NULL};
 
 // Pushes data unto the debug stack
 void debug_push(debug_state state, char source[]) {
-  if(debug_options.active) {
+  if(debug_options.active || state.priority) {
     int i;
     if(strlen(source) > 64) {
       debug_push(debug_warn, "debug_push too long");

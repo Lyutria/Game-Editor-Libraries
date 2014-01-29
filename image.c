@@ -1,6 +1,10 @@
 // PRE-REQUISITES:
 // > main.c
 
+// IMAGE FONTS follow the ISO 8859-1 and Microsoft Windows Latin-1 code list as
+// found at http://ascii-code.com/
+// Please follow this format for creating your fonts.
+//
 // (structs)
 // ____  _                   _
 /// ___|| |_ _ __ _   _  ___| |_ ___
@@ -8,6 +12,10 @@
 // ___) | |_| |  | |_| | (__| |_\__ \
 //|____/ \__|_|   \__,_|\___|\__|___/
 //
+
+debug_state debug_load  = {"load",  0, NULL};
+debug_state debug_draw  = {"draw",  0, NULL};
+debug_state debug_write = {"write", 0, NULL};
 
 struct Pixel {
   unsigned char r,g,b;
@@ -27,7 +35,7 @@ typedef struct image_struct {
 
   double scale; // Draw scale (1 is default)
 
-  char characters; // # characters in font
+  int characters; // # characters in font
   char first_character; // First char in font
 
   short int r,g,b;
@@ -79,7 +87,6 @@ void image_draw_section(Image source, int x_1, int y_1, int x_2, int y_2, int x_
   int y1 = min(y_1, y_2), y2 = max(y_1, y_2);
   int drawmode = 1;
 
-  debug_state debug_draw = {"draw", NULL};
   debug_push(debug_draw, source.name);
 
   if(source.width == source.original_width &&
@@ -120,27 +127,50 @@ void image_draw(Image source, int x_offset, int y_offset) {
 void text_draw_offset(Image font, char str[], int x_offset, int y_offset) {
   int x_pos=0, y_pos=0, i;
   int char_width, char_height;
+  int ascii_code;
   int reset_debug=0;
 
   if(debug_options.active) {
-    debug_state debug_write = {"write", NULL};
     debug_push(debug_write, font.name);
     debug_options.active=0;
     reset_debug=1;
   }
 
-  char_width = font.original_width / font.characters;
+  char_width  = font.original_width / font.characters;
   char_height = font.original_height;
 
   for(i=0; i<strlen(str); i++) {
     switch (str[i]) {
-      case '\n':
+      case '\n': // NEW LINE
         x_pos = 0;
         y_pos += 1;
         break;
 
-      default:
-        // Any normal letter
+      case '\a': // ASCII CODE
+        ascii_code = (str[i+1]-'0')*100 + (str[i+2]-'0')*10 + (str[i+3]-'0');
+
+        // If code is out of range break
+        // and continue writing
+        if(ascii_code > 254) {
+          i+=3;
+          break;
+        }
+
+        image_draw_section(font,
+            ((ascii_code-font.first_character)*char_width),0,
+            ((ascii_code-font.first_character)*char_width)+char_width,char_height,
+            (x_pos*char_width)+x_offset,
+            (y_pos*char_height)+y_offset);
+        i+=3;
+        x_pos += 1;
+        break;
+
+      default: // NORMAL LETTERS
+        if(str[i] < font.first_character) {
+          // Don't render unused escape codes,
+          // etc.
+          break;
+        }
         image_draw_section(font,
             ((str[i]-font.first_character)*char_width),0,
             ((str[i]-font.first_character)*char_width)+char_width,char_height,
@@ -170,8 +200,8 @@ void debug_manage(Image font) {
     erase(0,0,0,0);
 
     for(i=0; i<DEBUG_STACK_SIZE; i++) {
-      char buf[80];
-      sprintf(buf, debug_options.format, debug_stack[i].state.label, debug_stack[i].description);
+      char buf[100];
+      sprintf(buf, debug_options.format, debug_stack[i].state.priority, debug_stack[i].state.label, debug_stack[i].description);
       text_draw_offset(font, buf, 0, i*font.height);
       if(debug_stack[i].state.call != NULL) debug_stack[i].state.call();
     }
@@ -263,7 +293,6 @@ Image make_font(Image source, int num_chars, char first_char) {
 //       Specifically TGA.
 Image bmp_load(char source[]) {
   Image new_image;
-  debug_state debug_load = {"load", NULL};
 
   int bmp_bitrate, padding;
   int bmp_header[64], i,j, empty_bit;
