@@ -91,7 +91,10 @@ void image_draw_section(Image source, int x_1, int y_1, int x_2, int y_2, int x_
 
   if(source.width == source.original_width &&
       source.height == source.original_height) {
-    drawmode = 2;
+    drawmode = 1;
+  }
+  else {
+    drawmode=2;
   }
 
   for(i=x1; i<x2; i++) {
@@ -151,7 +154,7 @@ void text_draw_offset(Image font, char str[], int x_offset, int y_offset) {
 
         // If code is out of range break
         // and continue writing
-        if(ascii_code > 254) {
+        if(ascii_code > font.characters - font.first_character) {
           i+=3;
           break;
         }

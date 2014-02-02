@@ -45,7 +45,7 @@
 // need to worry about it killing your FPS (unless you debug_push too
 // often).
 
-#define DEBUG_STACK_SIZE 10
+#define DEBUG_STACK_SIZE 9
 #define DEBUG_ENABLED 1
 
 struct {
@@ -113,4 +113,32 @@ int random(int lower, int upper) {
     int v1 = max(upper, lower), v2 = min(upper, lower);
     return (rand(v1-v2)+v2);
 }
+
+// Finds the highest clone index out of all clones
+// of an actor so you can loop through all the clones
+// faster, e.g.:
+//
+//  for(i=0; i<CloneCount(my_actor); i++) {
+//    if(my_actor) {
+//      // Do stuff
+//    }
+//  }
+int CloneCount(Actor source) {
+  int highest_num=0, current_num=0, clones_found=0;
+  Actor* current_clone;
+  while(clones_found < ActorCount(source.name)) {
+    current_clone = getclone2(source.name, current_num);
+    if(current_clone) {
+      clones_found++;
+      if(current_clone->cloneindex > highest_num) {
+        highest_num = current_clone->cloneindex;
+      }
+    }
+    current_num++;
+  }
+  return highest_num;
+}
+
+
+
 
