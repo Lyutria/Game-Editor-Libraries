@@ -14,8 +14,6 @@
 //
 
 debug_state debug_load  = {"load",  0, NULL};
-debug_state debug_draw  = {"draw",  0, NULL};
-debug_state debug_write = {"write", 0, NULL};
 
 struct Pixel {
   unsigned char r,g,b;
@@ -31,7 +29,13 @@ typedef struct image_struct {
   int width;
   int height;
 
+  struct {
+    int x;
+    int y;
+  } topleft;
+
   int angle; // Draw angle (only 90deg increments)
+  int fix_canvas; // If 1, use slow putpixel() instead of lineto() to fix canvas edge drawing.
 
   double scale; // Draw scale (1 is default)
 
@@ -43,11 +47,14 @@ typedef struct image_struct {
   struct Pixel** data;
 } Image;
 
-typedef struct animation_struct {
-  int num_frames;
-  int fps;
-  Image* images;
-} Animation;
+// For use with image_gridsplit
+typedef struct image_grid_struct {
+  Image** image;
+  int rows;
+  int columns;
+  int row_size;
+  int column_size;
+} ImageGrid;
 
 // (image drawing)
 // ___
@@ -63,19 +70,22 @@ typedef struct animation_struct {
 //|____/|_|  \__,_| \_/\_/ |_|_| |_|\__, |
 //                                  |___/
 
-void putpixel_stretch(double x_pos, double y_pos, double x_scale, double y_scale) {
-  double i;
-  for (i=0; i<x_scale; i++) {
-    moveto((x_pos*x_scale + i), (y_pos*y_scale));
-    lineto((x_pos*x_scale + i), (y_pos*y_scale + (y_scale-1)));
-  }
-}
-
-void putpixel_offset(double x_pos, double y_pos, double x_scale, double y_scale, int x_offset, int y_offset) {
-  double i;
-  for (i=0; i<x_scale; i++) {
-    moveto(x_offset + (x_pos*x_scale + i), y_offset + (y_pos*y_scale));
-    lineto(x_offset + (x_pos*x_scale + i), y_offset + (y_pos*y_scale + (y_scale-1)));
+void putpixel_offset(double x_pos, double y_pos, double x_scale, double y_scale, int x_offset, int y_offset, int accurate) {
+  double i,j;
+  switch(accurate) {
+    case 1:
+      for (i=0; i<x_scale; i++) {
+        for (j=0; j<y_scale; j++) {
+          putpixel(x_offset + (x_pos*x_scale + i), y_offset + (y_pos*y_scale + j));
+        }
+      }
+      break;
+    default:
+      for (i=0; i<x_scale; i++) {
+        moveto(x_offset + (x_pos*x_scale + i), y_offset + (y_pos*y_scale));
+        lineto(x_offset + (x_pos*x_scale + i), y_offset + (y_pos*y_scale + (y_scale-1)));
+      }
+      break;
   }
 }
 
@@ -87,18 +97,17 @@ void image_draw_section(Image source, int x_1, int y_1, int x_2, int y_2, int x_
   int y1 = min(y_1, y_2), y2 = max(y_1, y_2);
   int drawmode = 1;
 
-  debug_push(debug_draw, source.name);
-
   if(source.width == source.original_width &&
-      source.height == source.original_height) {
+      source.height == source.original_height ||
+      source.scale != 1) {
     drawmode = 1;
   }
   else {
     drawmode=2;
   }
 
-  for(i=x1; i<x2; i++) {
-    for(j=y1; j<y2; j++) {
+  for(i=x1+source.topleft.x; i<x2+source.topleft.x; i++) {
+    for(j=y1+source.topleft.y; j<y2+source.topleft.y; j++) {
       if(source.data[i][j].r != source.transparent.r &&
          source.data[i][j].g != source.transparent.g &&
          source.data[i][j].b != source.transparent.b) {
@@ -107,14 +116,14 @@ void image_draw_section(Image source, int x_1, int y_1, int x_2, int y_2, int x_
 
         switch(drawmode) {
           case 1:
-            putpixel(i-x1+x_offset, j-y1+y_offset);
+            putpixel(i-x1+x_offset-source.topleft.x, j-y1+y_offset-source.topleft.y);
             break;
 
           case 2:
-            putpixel_offset(i-x1, j-y1,
-              (double)source.width/(double)source.original_width,
-              (double)source.height/(double)source.original_height,
-              x_offset, y_offset);
+            putpixel_offset(i-x1-source.topleft.x, j-y1-source.topleft.y,
+              (double)source.width/(double)source.original_width*source.scale,
+              (double)source.height/(double)source.original_height*source.scale,
+              x_offset, y_offset, source.fix_canvas);
             break;
         }
       }
@@ -131,13 +140,6 @@ void text_draw_offset(Image font, char str[], int x_offset, int y_offset) {
   int x_pos=0, y_pos=0, i;
   int char_width, char_height;
   int ascii_code;
-  int reset_debug=0;
-
-  if(debug_options.active) {
-    debug_push(debug_write, font.name);
-    debug_options.active=0;
-    reset_debug=1;
-  }
 
   char_width  = font.original_width / font.characters;
   char_height = font.original_height;
@@ -183,8 +185,6 @@ void text_draw_offset(Image font, char str[], int x_offset, int y_offset) {
         break;
     }
   }
-
-  if(reset_debug) debug_options.active = 1;
 }
 
 void text_draw(Image font, char str[]) {
@@ -200,7 +200,7 @@ void debug_manage(Image font) {
   if(debug_options.active && debug_options.redraw) {
     int i;
     debug_options.active = 0;
-    erase(0,0,0,0);
+    erase(0,0,0,debug_options.bg_transparency);
 
     for(i=0; i<DEBUG_STACK_SIZE; i++) {
       char buf[100];
@@ -242,6 +242,57 @@ Image image_setrgb(Image source, int r, int g, int b) {
   return new_image;
 }
 
+Image image_subimage(Image source, int X, int Y, int width, int height) {
+  Image new_image = source;
+  new_image.topleft.x = X + source.topleft.x;
+  new_image.topleft.y = Y + source.topleft.y;
+  new_image.original_width = width;
+  new_image.original_height = height;
+  new_image.width = new_image.original_width;
+  new_image.height = new_image.original_height;
+  new_image.fix_canvas = source.fix_canvas;
+  return new_image;
+}
+
+// This uses image_subimage to give a 2D dynamic array of
+// equal splits of an image, useful in certain situations e.g.:
+//  I have a button image that is 24x24, each 8x8 square contains
+//  one section (i.e. topleft, topmid, topright, etc.) you can use
+//  image_gridsplit(button, 3, 3) to get an array of these sections
+//  quickly
+ImageGrid image_gridsplit(Image source, int columns, int rows) {
+  ImageGrid new_grid;
+  int i, j;
+  int ptw = (double)source.original_width/(double)columns;
+  int pth = (double)source.original_height/(double)rows;
+
+  new_grid.image = (Image**)malloc(columns * sizeof(Image*));
+  for (i=0; i<columns; i++) {
+    new_grid.image[i] = (Image*)malloc(rows * sizeof(Image));
+  }
+
+  for(i=0;i<columns;i++) {
+    for(j=0;j<rows;j++) {
+      new_grid.image[i][j] = image_subimage(source, i*ptw,j*pth, ptw,pth);
+    }
+  }
+
+  new_grid.rows = rows;
+  new_grid.columns = columns;
+  new_grid.row_size = pth;
+  new_grid.column_size = ptw;
+
+  return new_grid;
+}
+
+void image_freegrid(ImageGrid*source) {
+  int i;
+  for(i=0;i<source->columns;i++) {
+    free(source->image[i]);
+  }
+  free(source->image);
+}
+
 // (image loading, creation)
 // ___
 //|_ _|_ __ ___   __ _  __ _  ___
@@ -272,6 +323,7 @@ Image image_new(Image source, int width, int height) {
   debug_push(debug_info, "new image allocated");
   return new_image;
 }
+
 
 /*
 void image_delete(Image source) {
@@ -321,6 +373,10 @@ Image bmp_load(char source[]) {
     new_image.r = 255;
     new_image.g = 255;
     new_image.b = 255;
+    new_image.topleft.x = 0;
+    new_image.topleft.y = 0;
+    new_image.scale = 1;
+    new_image.fix_canvas = 0;
 
     new_image.data = (struct Pixel**)malloc(new_image.width * sizeof(struct Pixel*));
     for (i=0; i<new_image.width; i++) {
@@ -346,3 +402,6 @@ Image bmp_load(char source[]) {
   debug_push(debug_load, source);
   return new_image;
 }
+
+
+

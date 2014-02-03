@@ -22,6 +22,20 @@ typedef struct TextFile {
 //|_|   \__,_|_| |_|\___|\__|_|\___/|_| |_|___/
 //
 
+int strlens(char source[]) {
+  int i, result;
+  result = strlen(source);
+  for (i=0; i<strlen(source); i++) {
+    char c_text = source[i];
+    switch (c_text) {
+      case '\a':
+        result-=3;
+        break;
+    }
+  }
+  return result;
+}
+
 char* int_to_str(int val) {
     // Creates a string using sprintf
     char buf[128];
@@ -106,9 +120,9 @@ TextFile text_load(char filename[]) {
   // that I know of.
 
 	while((ch = fgetc(file)) != EOF) {
-		if(c == '\n') result.lines++;
+		if(ch == '\n') result.lines++;
   }
-	if(c != '\n') result.lines++;
+	if(ch != '\n') result.lines++;
 
   fseek(file, 0, SEEK_SET);
 

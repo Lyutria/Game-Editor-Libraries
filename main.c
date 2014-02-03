@@ -52,7 +52,8 @@ struct {
   char active;
   char redraw;
   char format[32];
-} debug_options = {DEBUG_ENABLED, 1, "[%d] %s: %s"};
+  double bg_transparency;
+} debug_options = {DEBUG_ENABLED, 1, "[%d] %s: %s", 1};
 // Some of the format styles you can try:
 // "[%d] %s: %s" (Basic) (default)
 // "%d-%s: %s"   (Minimal)
