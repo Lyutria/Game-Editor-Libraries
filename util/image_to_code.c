@@ -2,15 +2,27 @@
 // > main.c
 // > image.c
 
+#if defined(GELIB_MAIN) && defined(GELIB_IMAGE)
+  #ifndef GELIB_IMAGE_TO_CODE
+    #define GELIB_IMAGE_TO_CODE
+  #else
+    #error This file already exists in global code.
+  #endif
+#else
+  #error This code requires MAIN.C, IMAGE.C to be included beforehand.
+#endif
+
 // This uses the NAME property of the IMAGE, so you'll need
 // to make sure the name is proper for an variable and function.
 //
 // This requires to use of the "init" style function, as it
 // generates a function to generate the image.
 //
-// MODE 0 is neutral (per pixel) mode, better for images with lots of different colors
-// MODE 1 creates a variable color index, better for images with few colors
-//        You can only use MODE 1 for images up to 1024 colors.
+// MODE 0 is neutral (per pixel) mode, worse in virtually every situation except for
+//        low memory limits.
+// MODE 1 creates a variable color index, better for images especially with few colors
+//        You can only use MODE 1 for images up to 1024 colors, but just modify the limit
+//        below to get more.
 
 void image_to_code(Image source, char gen_name[], char file_name[], int mode) {
   FILE* dest_file = fopen(file_name, "w");
@@ -74,7 +86,6 @@ void image_to_code(Image source, char gen_name[], char file_name[], int mode) {
   if(mode == 1) {
     for(i=0; i<index_counter; i++) {
       fprintf(dest_file, "  struct Pixel c%d = {%d,%d,%d};\n", i, color_index[i][0], color_index[i][1], color_index[i][2]);
-      //fprintf(dest_file, "  struct Pixel col%03d%03d%03d = {%d, %d, %d};\n", color_index[i][0], color_index[i][1], color_index[i][2], color_index[i][0], color_index[i][1], color_index[i][2]);
     }
   }
 
@@ -82,7 +93,10 @@ void image_to_code(Image source, char gen_name[], char file_name[], int mode) {
   fprintf(dest_file, "  gi.width = %d; gi.original_width = gi.width;\n", source.original_width);
   fprintf(dest_file, "  gi.height = %d; gi.original_height = gi.height;\n", source.original_height);
   fprintf(dest_file, "  gi.angle=0;\n");
-  fprintf(dest_file, "  gi.scale=0;\n");
+  fprintf(dest_file, "  gi.r=255;\n");
+  fprintf(dest_file, "  gi.g=255;\n");
+  fprintf(dest_file, "  gi.b=255;\n");
+  fprintf(dest_file, "  gi.scale=1;\n");
   fprintf(dest_file, "  gi.transparent.r=%d;\n", source.transparent.r);
   fprintf(dest_file, "  gi.transparent.g=%d;\n", source.transparent.g);
   fprintf(dest_file, "  gi.transparent.b=%d;\n", source.transparent.b);
@@ -142,5 +156,4 @@ void image_to_code(Image source, char gen_name[], char file_name[], int mode) {
 
   fprintf(dest_file, "\n  return gi;\n}");
   fclose(dest_file);
-  debug_push(debug_info, "img_to_code finished");
 }

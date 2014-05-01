@@ -3,6 +3,16 @@
 // > image.c
 // > text.c
 
+#if defined(GELIB_MAIN) && defined(GELIB_IMAGE) && defined(GELIB_TEXT)
+  #ifndef GELIB_GUI
+    #define GELIB_GUI
+  #else
+    #error This file already exists in global code.
+  #endif
+#else
+  #error This code requires MAIN.C, IMAGE.C, AND TEXT.C to be included beforehand.
+#endif
+
 #define GUI_BUTTON 1
 #define GUI_LABEL 2
 #define GUI_TOGGLE_BUTTON 3
@@ -25,12 +35,13 @@
 struct {
     Image main_theme; // Main theme elements default to
     int num_elements; // Stores the current number of GUI elements
+    int mouse_state;
 } gui_options; // Make a gui_options struct right away.
 
 struct gui_theme {
   Image font;
   Image button;
-  Image label;
+  // Image label;
   Image toggle_button;
   Image counter;
   Image textbox;
@@ -47,22 +58,24 @@ struct gui_theme {
 } gui_theme;
 
 typedef struct gui {
+  Actor* bound_to; // A pointer to the actor that this element is bound to
   int owner_id; // Usually a GUI actor's ANIMPOS variable.
   int type;
-  Actor* bound_to; // A pointer to the actor that this element is bound to
-  int state; // Lets the drawer know what state to draw in
   char redraw; // Lets us keep FPS up by only redrawing when we need to
+  unsigned char r,g,b; // Colors for the element so you don't have to set it in the Image
+  Image* font; // Lets different gui elements have different fonts
   struct gui_theme* theme;
-  Image *font; // Lets different gui elements have different fonts
 
-  union elements { // A union to save memory space, since
+  union set { // A union to save memory space, since
            // There's a lot of variables.
     struct button { // A clickable button
       char text[256]; // Text to be displayed by said button
+      int state; // The state of the button (mouseover, mousedown, etc.)
     } button;
 
     struct label {
-      char text[256];
+      char text[512];
+      char align;
     } label;
 
     struct toggle_button { // A clickable toggle button
@@ -78,6 +91,7 @@ typedef struct gui {
     } counter;
 
     struct textbox { // Fully usuable text box
+      char* text;
       char right_delimiter; // Text for the "enter" button
       char caret_pos; // Stores cursor/caret position
       short int active; // Stores if it has focus
@@ -89,16 +103,25 @@ typedef struct gui {
     } textbox;
 
     struct meter { // Displays a bar (like a progress bar)
-      double *variable; // Pointer to variable to display
+      double value; // Value to display
+      double last_value;
+      int margin; // Number of pixels from (BOTH) sides that the meter starts and ends
+                 // (so the edges don't have to be EXACT on the edges of the image for
+                 // proper calculations)
       double max; // The max value for the bar/variable
       char text[256];
-    } bar;
+    } meter;
 
     struct window { // A window container
       char text[256]; // Window Title
       char buttons[3]; // Up to 3 caption buttons in the top-right
       char active; // If window is shown at all
       char fold; // If window should be folded.
+      struct {
+        int x;
+        int y;
+      } offset;
+      int state;
     } window;
 
     struct menu { // A menu container
@@ -117,7 +140,7 @@ typedef struct gui {
       int round; // Rounding for slider value (every 2, etc.)
       char text[256]; // Displayed when not moving slider
     } slider;
-  } elements;
+  } set;
 } gui;
 
 gui* gui_elements; // Dynamic array of GUI elements, to hold them between frames.
@@ -149,43 +172,119 @@ int hotspot(int x1, int y1, int x2, int y2) {
   }
 }
 
-gui* get_this_element() {
+gui* this_element() {
   return &gui_elements[(int)animpos-1];
+}
+
+void bind_this_element_to(Actor source) {
+
+}
+
+gui* get_element(Actor*source) {
+  return &gui_elements[(int)source->animpos-1];
+}
+
+void redraw_element(gui* source) {
+  source->redraw=1;
 }
 
 void init_gui() {
   gui_options.num_elements=0;
+  gui_options.mouse_state=0;
   gui_theme.text_offset.x=0;
   gui_theme.text_offset.y=0;
   gui_elements = malloc(sizeof(gui));
 }
 
+// This is here to lower the sheer amount of
+// code for GUI drawing, as most of the elements
+// use the same method
+void image_draw_3x3s(Image source, int width, int height) {
+  ImageGrid igrid;
+  igrid = image_gridsplit(source, 3, 3);
+  // We seperate the grabbed button image into 9 parts for good looking stretching
+  // And now draw it
+
+  // Draw corners
+  image_draw(igrid.image[0][0], 0,0);
+  image_draw(igrid.image[2][0], width-igrid.column_size,0);
+  image_draw(igrid.image[0][2], 0,height-igrid.row_size);
+  image_draw(igrid.image[2][2], width-igrid.column_size,height-igrid.row_size);
+
+  // Draw sides
+  igrid.image[1][0].width = width-(igrid.column_size*2); //top
+  igrid.image[1][2].width = width-(igrid.column_size*2); //bottom
+  igrid.image[1][2].fix_canvas = 1;
+  igrid.image[0][1].height=height-(igrid.row_size*2); //left
+  igrid.image[2][1].height=height-(igrid.row_size*2); //right
+  igrid.image[2][1].fix_canvas = 1;
+  image_draw(igrid.image[1][0], igrid.column_size,0);
+  image_draw(igrid.image[1][2], igrid.column_size,height-igrid.row_size);
+  image_draw(igrid.image[0][1], 0,igrid.row_size);
+  image_draw(igrid.image[2][1], width-igrid.column_size, igrid.row_size);
+
+  // Draw middle
+  igrid.image[1][1].width = width-igrid.column_size*2;
+  igrid.image[1][1].height = height-igrid.row_size*2;
+  image_draw(igrid.image[1][1], igrid.column_size, igrid.row_size);
+  image_freegrid(&igrid);
+}
+
+void image_draw_3x3(Image source) {
+  image_draw_3x3s(source, width, height);
+}
+
 
 void do_gui(char type[]) {
-  if (animpos == 0) {
+  if (animpos==0) {
     char buffers[2][256];
     int params;
     gui new_element;
     gui_options.num_elements += 1;
     animpos = gui_options.num_elements;
     new_element.owner_id = animpos;
-    new_element.state = 0;
     new_element.redraw = 1;
     new_element.theme = &gui_theme;
+    new_element.font = &gui_theme.font;
+    new_element.r = 255;
+    new_element.g = 255;
+    new_element.b = 255;
 
     params = sscanf(type, "%[^:]%*c%[^\n]", buffers[0], buffers[1]);
 
     if (!strcmp(buffers[0], "button")) {
       new_element.type = GUI_BUTTON;
       if (params>2) {
-        sscanf(buffers[1], "%[^\n]", new_element.elements.button.text);
+        sscanf(buffers[1], "%[^\n]", new_element.set.button.text);
       }
+    }
+    else if (!strcmp(buffers[0], "window")) {
+      new_element.type = GUI_WINDOW;
+      new_element.set.window.active=1;
+      if (params>2) {
+        sscanf(buffers[1], "%[^\n]", new_element.set.window.text);
+      }
+    }
+    else if (!strcmp(buffers[0], "label")) {
+      new_element.type = GUI_LABEL;
+      new_element.set.label.align = 'l';
+      if (params>2) {
+        sscanf(buffers[1], "%[^\n]", text);
+      }
+    }
+    else if (!strcmp(buffers[0], "menu")) {
+      new_element.type = GUI_MENU;
+      new_element.set.menu.active=0;
+    }
+    else if (!strcmp(buffers[0], "meter")) {
+      new_element.type = GUI_METER;
+      sscanf(buffers[1], "%d,%d", &new_element.set.meter.value, &new_element.set.meter.max);
     }
 
     gui_elements = realloc(gui_elements, sizeof(gui)*gui_options.num_elements);
     gui_elements[gui_options.num_elements-1] = new_element;
   } else {
-    gui* this_e = get_this_element();
+    gui* this_e = this_element();
     switch(this_e->type) {
       default:
       {
@@ -197,8 +296,8 @@ void do_gui(char type[]) {
       case GUI_BUTTON:
       {
         // STATES
-        int new_state = this_e->state;
-        if(this_e->state != 2) { // mousedown
+        int new_state = this_e->set.button.state;
+        if(this_e->set.button.state != 2) { // mousedown
           if(!hotspot(0,0,width,height)) {
             new_state = 0; // No mouseover
           } else {
@@ -208,13 +307,11 @@ void do_gui(char type[]) {
         else {
           if(!hotspot(0,0,width,height)) {
             new_state = 0;
-          } else {
-            this_e->redraw = 1;
           }
         }
 
-        if(this_e->state != new_state) {
-          this_e->state = new_state;
+        if(this_e->set.button.state != new_state) {
+          this_e->set.button.state = new_state;
           this_e->redraw = 1;
         }
 
@@ -225,43 +322,154 @@ void do_gui(char type[]) {
         if(this_e->redraw) {
           int button_height = this_e->theme->button.original_height/3;
           int button_width = this_e->theme->button.original_width;
-          int char_width  = this_e->theme->font.original_width / this_e->theme->font.characters;
-          Image current_button = image_subimage(this_e->theme->button, 0,button_height*(this_e->state), button_width,button_height);
-          ImageGrid bt = image_gridsplit(current_button, 3, 3);
-          // We seperate the grabbed button image into 9 parts for good looking stretching
-          // And now draw it
+
+          Image current_button = image_subimage(this_e->theme->button, 0,button_height*(this_e->set.button.state), button_width,button_height);
+          image_setrgb(&current_button, this_e->r, this_e->g, this_e->b);
           erase(0,0,0,1);
-
-          // Draw corners
-          image_draw(bt.image[0][0], 0,0);
-          image_draw(bt.image[2][0], width-bt.column_size,0);
-          image_draw(bt.image[0][2], 0,height-bt.row_size);
-          image_draw(bt.image[2][2], width-bt.column_size,height-bt.row_size);
-
-          // Draw sides
-          bt.image[1][0].width = width-(bt.column_size*2); //top
-          bt.image[1][2].width = width-(bt.column_size*2); //bottom
-          bt.image[1][2].fix_canvas = 1;
-          bt.image[0][1].height=height-(bt.row_size*2); //left
-          bt.image[2][1].height=height-(bt.row_size*2); //right
-          bt.image[2][1].fix_canvas = 1;
-          image_draw(bt.image[1][0], bt.column_size,0);
-          image_draw(bt.image[1][2], bt.column_size,height-bt.row_size);
-          image_draw(bt.image[0][1], 0,bt.row_size);
-          image_draw(bt.image[2][1], width-bt.column_size, bt.row_size);
-
-          // Draw middle
-          bt.image[1][1].width = width-bt.column_size*2;
-          bt.image[1][1].height = height-bt.row_size*2;
-          image_draw(bt.image[1][1], bt.column_size, bt.row_size);
+          image_draw_3x3(current_button);
 
           // Draw text
-          text_draw_offset(this_e->theme->font, this_e->elements.button.text,
-                           (width/2) - ((strlens(this_e->elements.button.text)*char_width)/2) + this_e->theme->text_offset.x,
-                           (height/2)- ((this_e->theme->font.height)/2) + this_e->theme->text_offset.y);
+          text_draw_offset(*this_e->font, this_e->set.button.text,
+                           (width/2) - ((strlens(this_e->set.button.text)*(this_e->font->char_width))/2) + this_e->theme->text_offset.x,
+                           (height/2)- ((this_e->font->height)/2) + this_e->theme->text_offset.y);
 
-          image_freegrid(&bt);
           this_e->redraw = 0;
+        }
+        break;
+      }
+
+      // GUI: WINDOWCODE
+      // TODO: Add binding, caption buttons
+      case GUI_WINDOW:
+      {
+        // STATES
+        int title_height = (this_e->theme->window.height/3)/3;
+        if(this_e->set.window.active==1) {
+        int new_state = this_e->set.window.state;
+          if(this_e->set.window.state != 2) { // dragged
+            if(!hotspot(0,0,width,title_height)) {
+              new_state = 0; // normal
+            } else {
+              new_state = 1; // mouseover
+            }
+          }
+          else {
+            new_state = 2;
+            xscreen = xmouse-this_e->set.window.offset.x;
+            yscreen = ymouse-this_e->set.window.offset.y;
+          }
+
+          if(this_e->set.window.state != new_state) {
+            this_e->set.window.state = new_state;
+            this_e->redraw = 1;
+          }
+
+          // PROCESS (binding, etc.)
+          // (empty ATM)
+
+          // DRAW
+          if(this_e->redraw) {
+            int window_height = this_e->theme->window.original_height/3;
+            int window_width = this_e->theme->window.original_width;
+            Image current_window = image_subimage(this_e->theme->window, 0,window_height*(this_e->set.window.state), window_width,window_height);
+            image_setrgb(&current_window, this_e->r, this_e->g, this_e->b);
+            erase(0,0,0,1);
+            image_draw_3x3(current_window);
+
+            // Draw text
+            text_draw_offset(*this_e->font, this_e->set.window.text,
+                             (width/2) - ((strlens(this_e->set.window.text)*this_e->font->char_width)/2) + this_e->theme->text_offset.x,
+                             (title_height/2)- ((this_e->font->height)/2) + this_e->theme->text_offset.y);
+
+            this_e->redraw = 0;
+          }
+          break;
+        } else {
+          erase(0,0,0,1);
+          break;
+        }
+      }
+
+      //GUI: LABELCODE
+      case GUI_LABEL:
+      {
+        if(strcmp(text, this_e->set.label.text)) {
+          strncpy(this_e->set.label.text, text, 512);
+          this_e->redraw=1;
+        }
+
+        if(this_e->redraw) {
+          erase(0,0,0,1);
+          switch(this_e->set.label.align) {
+            case 'l':
+              text_draw_offset(*this_e->font, this_e->set.label.text,
+                               this_e->theme->text_offset.x,
+                               (height/2)- ((this_e->font->height)/2) + this_e->theme->text_offset.y);
+              break;
+            case 'c':
+              text_draw_offset(*this_e->font, this_e->set.label.text,
+                               (width/2) - ((strlens(this_e->set.label.text)*this_e->font->char_width)/2) + this_e->theme->text_offset.x,
+                               (height/2)- ((this_e->font->height)/2) + this_e->theme->text_offset.y);
+              break;
+          }
+          this_e->redraw=0;
+        }
+        break;
+      }
+
+      //GUI: METERCODE
+      //TODO: Figure out why this_e->set.meter.value is set over-max when changed
+      case GUI_METER:
+      {
+        if(this_e->set.meter.value < 0) this_e->set.meter.value = 0;
+        else if (this_e->set.meter.value > this_e->set.meter.max) this_e->set.meter.value = this_e->set.meter.max;
+
+        if(this_e->set.meter.last_value != this_e->set.meter.value) {
+          this_e->redraw=1;
+        }
+
+        if(this_e->redraw) {
+          Image*cur = &this_e->theme->meter;
+          Image second_layer = image_subimage(*cur,
+                                              0,cur->original_height/2,
+                                              (double)cur->original_width*((double)this_e->set.meter.value/(double)this_e->set.meter.max),
+                                              cur->original_height/2);
+          char buffer[64];
+          sprintf(buffer, "%d: %d, %d", this_e->set.meter.last_value, this_e->set.meter.value, this_e->set.meter.max);
+          sdebug("METER", buffer);
+          erase(0,0,0,1);
+          if(this_e->set.meter.last_value < this_e->set.meter.value) {
+            // Redraw only second layer, it's increasing
+            image_draw_3x3s(second_layer, (double)width*(double)(this_e->set.meter.value/this_e->set.meter.max), height);
+          } else {
+            // Less than, need complete redraw
+            Image first_layer = image_subimage(*cur,0,0,cur->original_width,cur->original_height/2);
+            image_draw_3x3(first_layer);
+            image_draw_3x3s(second_layer, (double)width*(double)(this_e->set.meter.value/this_e->set.meter.max), height);
+          }
+          this_e->set.meter.last_value = this_e->set.meter.value;
+          this_e->redraw=0;
+        }
+        break;
+      }
+
+      //GUI: MENUCODE
+      //TODO: visual effects (fading, etc) and binding
+      case GUI_MENU:
+      {
+        // Little need to create redraw code for the menu
+        // when we have transp. As always, forced redraw
+        // is available if you need it.
+        if(this_e->set.menu.active) {
+          transp=0;
+        } else {
+          transp=1;
+        }
+
+        if(this_e->redraw) {
+          erase(0,0,0,1);
+          image_draw_3x3(this_e->theme->menu);
+          this_e->redraw=0;
         }
         break;
       }
@@ -270,17 +478,38 @@ void do_gui(char type[]) {
 }
 
 void gui_mousedown() {
-  switch(get_this_element()->type) {
+  int new_state;
+  gui* this_e = this_element();
+  switch(this_e->type) {
     case GUI_BUTTON:
-      get_this_element()->state=2;
+      this_e->set.button.state=2;
+      this_e->redraw=1;
+      break;
+
+    case GUI_WINDOW:
+      if(hotspot(0,0,width,(this_e->theme->window.height/2)/3)) {
+        this_e->set.window.state=2; // dragging
+        mouse_to_actor();
+        this_e->set.window.offset.x = xmouse;
+        this_e->set.window.offset.y = ymouse;
+        this_e->redraw=1;
+        mouse_to_screen();
+      }
       break;
   }
 }
 
 void gui_mouseup() {
-  switch(get_this_element()->type) {
+  gui* this_e = this_element();
+  switch(this_e->type) {
     case GUI_BUTTON:
-      get_this_element()->state=0;
+      this_e->set.button.state=0;
+      this_e->redraw=1;
+      break;
+
+    case GUI_WINDOW:
+      this_e->set.window.state=0;
+      this_e->redraw=1;
       break;
   }
 }

@@ -1,6 +1,16 @@
 // PRE-REQUISITES:
 // > main.c
 
+#ifndef GELIB_MAIN
+  #error This code requires MAIN.C to be included beforehand.
+#else
+  #ifndef GELIB_IMAGE
+    #define GELIB_IMAGE
+  #else
+    #error This file already exists in global code.
+  #endif
+#endif
+
 // IMAGE FONTS follow the ISO 8859-1 and Microsoft Windows Latin-1 code list as
 // found at http://ascii-code.com/
 // Please follow this format for creating your fonts.
@@ -12,8 +22,6 @@
 // ___) | |_| |  | |_| | (__| |_\__ \
 //|____/ \__|_|   \__,_|\___|\__|___/
 //
-
-debug_state debug_load  = {"load",  0, NULL};
 
 struct Pixel {
   unsigned char r,g,b;
@@ -41,6 +49,8 @@ typedef struct image_struct {
 
   int characters; // # characters in font
   char first_character; // First char in font
+  int char_height;
+  int char_width;
 
   short int r,g,b;
 
@@ -72,25 +82,25 @@ typedef struct image_grid_struct {
 
 void putpixel_offset(double x_pos, double y_pos, double x_scale, double y_scale, int x_offset, int y_offset, int accurate) {
   double i,j;
-  switch(accurate) {
-    case 1:
-      for (i=0; i<x_scale; i++) {
-        for (j=0; j<y_scale; j++) {
-          putpixel(x_offset + (x_pos*x_scale + i), y_offset + (y_pos*y_scale + j));
+  if (x_offset+x_pos*x_scale <= width && y_offset+y_pos*y_scale <= height) {
+    switch(accurate) {
+      case 1:
+        for (i=0; i<x_scale; i++) {
+          for (j=0; j<y_scale; j++) {
+            putpixel(x_offset + (x_pos*x_scale + i), y_offset + (y_pos*y_scale + j));
+          }
         }
-      }
-      break;
-    default:
-      for (i=0; i<x_scale; i++) {
-        moveto(x_offset + (x_pos*x_scale + i), y_offset + (y_pos*y_scale));
-        lineto(x_offset + (x_pos*x_scale + i), y_offset + (y_pos*y_scale + (y_scale-1)));
-      }
-      break;
+        break;
+      default:
+        for (i=0; i<x_scale; i++) {
+          moveto(x_offset + (x_pos*x_scale + i), y_offset + (y_pos*y_scale));
+          lineto(x_offset + (x_pos*x_scale + i), y_offset + (y_pos*y_scale + (y_scale-1)));
+        }
+        break;
+    }
   }
 }
 
-// TODO: implement RGB modifiers using source.r/g/b
-//       previous implementation broke.
 void image_draw_section(Image source, int x_1, int y_1, int x_2, int y_2, int x_offset, int y_offset) {
   int i, j;
   int x1 = min(x_1, x_2), x2 = max(x_1, x_2);
@@ -98,9 +108,9 @@ void image_draw_section(Image source, int x_1, int y_1, int x_2, int y_2, int x_
   int drawmode = 1;
 
   if(source.width == source.original_width &&
-      source.height == source.original_height ||
-      source.scale != 1) {
-    drawmode = 1;
+     source.height == source.original_height &&
+     source.scale == 1) {
+    drawmode=1;
   }
   else {
     drawmode=2;
@@ -108,21 +118,25 @@ void image_draw_section(Image source, int x_1, int y_1, int x_2, int y_2, int x_
 
   for(i=x1+source.topleft.x; i<x2+source.topleft.x; i++) {
     for(j=y1+source.topleft.y; j<y2+source.topleft.y; j++) {
-      if(source.data[i][j].r != source.transparent.r &&
-         source.data[i][j].g != source.transparent.g &&
+      if(source.data[i][j].r != source.transparent.r ||
+         source.data[i][j].g != source.transparent.g ||
          source.data[i][j].b != source.transparent.b) {
-        struct Pixel color = source.data[i][j];
-        setpen(color.r, color.g, color.b, 0, 1);
+
+        setpen((double)source.data[i][j].r*((double)source.r/(double)255.0),
+               (double)source.data[i][j].g*((double)source.g/(double)255.0),
+               (double)source.data[i][j].b*((double)source.b/(double)255.0), 0, 1);
 
         switch(drawmode) {
           case 1:
+            if(i-x1+x_offset-source.topleft.x > width) break;
+            else if(j-y1+y_offset-source.topleft.y > height) break;
             putpixel(i-x1+x_offset-source.topleft.x, j-y1+y_offset-source.topleft.y);
             break;
 
           case 2:
             putpixel_offset(i-x1-source.topleft.x, j-y1-source.topleft.y,
-              (double)source.width/(double)source.original_width*source.scale,
-              (double)source.height/(double)source.original_height*source.scale,
+              ((double)source.width/(double)source.original_width)*source.scale,
+              ((double)source.height/(double)source.original_height)*source.scale,
               x_offset, y_offset, source.fix_canvas);
             break;
         }
@@ -136,13 +150,16 @@ void image_draw(Image source, int x_offset, int y_offset) {
 }
 
 // TODO: Add more styling methods, I.E. color code '\a898', tabs '\t', etc.
-void text_draw_offset(Image font, char str[], int x_offset, int y_offset) {
+void text_draw_offset(Image cfont, char str[], int x_offset, int y_offset) {
   int x_pos=0, y_pos=0, i;
-  int char_width, char_height;
-  int ascii_code;
+  int dchar_width, dchar_height;
+  int ascii_code, or, og, ob;
+  or = cfont.r;
+  og = cfont.g;
+  ob = cfont.b;
 
-  char_width  = font.original_width / font.characters;
-  char_height = font.original_height;
+  dchar_width  = (cfont.original_width / cfont.characters) * (((double)cfont.width/(double)cfont.original_width)*cfont.scale);
+  dchar_height = (cfont.original_height) * (((double)cfont.height/(double)cfont.original_height)*cfont.scale);
 
   for(i=0; i<strlen(str); i++) {
     switch (str[i]) {
@@ -151,40 +168,50 @@ void text_draw_offset(Image font, char str[], int x_offset, int y_offset) {
         y_pos += 1;
         break;
 
-      case '\a': // ASCII CODE
-        ascii_code = (str[i+1]-'0')*100 + (str[i+2]-'0')*10 + (str[i+3]-'0');
+      case '\a': // ASCII CODE (A for ASCII)
+        ascii_code = ctoi(str[i+1])*100 + ctoi(str[i+2])*10 + ctoi(str[i+3]);
 
         // If code is out of range break
         // and continue writing
-        if(ascii_code > font.characters - font.first_character) {
+        if(ascii_code > cfont.characters + cfont.first_character - 1) {
           i+=3;
           break;
         }
 
-        image_draw_section(font,
-            ((ascii_code-font.first_character)*char_width),0,
-            ((ascii_code-font.first_character)*char_width)+char_width,char_height,
-            (x_pos*char_width)+x_offset,
-            (y_pos*char_height)+y_offset);
+        image_draw_section(cfont,
+            ((ascii_code-cfont.first_character)*cfont.char_width),0,
+            ((ascii_code-cfont.first_character)*cfont.char_width)+cfont.char_width,cfont.char_height,
+            (x_pos*dchar_width)+x_offset,
+            (y_pos*dchar_height)+y_offset);
         i+=3;
         x_pos += 1;
         break;
 
+      case '\t': // COLOR CHANGING (T for TINT)
+        cfont.r = percent_of(what_percent_of(ctoi(str[i+1]), 9), 255);
+        cfont.g = percent_of(what_percent_of(ctoi(str[i+2]), 9), 255);
+        cfont.b = percent_of(what_percent_of(ctoi(str[i+3]), 9), 255);
+        i+=3;
+        break;
+
       default: // NORMAL LETTERS
-        if(str[i] < font.first_character) {
+        if(str[i] < cfont.first_character) {
           // Don't render unused escape codes,
           // etc.
           break;
         }
-        image_draw_section(font,
-            ((str[i]-font.first_character)*char_width),0,
-            ((str[i]-font.first_character)*char_width)+char_width,char_height,
-            (x_pos*char_width)+x_offset,
-            (y_pos*char_height)+y_offset);
+        image_draw_section(cfont,
+            ((str[i]-cfont.first_character)*cfont.char_width),0,
+            ((str[i]-cfont.first_character)*cfont.char_width)+cfont.char_width,cfont.char_height,
+            (x_pos*dchar_width)+x_offset,
+            (y_pos*dchar_height)+y_offset);
         x_pos += 1;
         break;
     }
   }
+  cfont.r = or;
+  cfont.g = og;
+  cfont.b = ob;
 }
 
 void text_draw(Image font, char str[]) {
@@ -196,23 +223,24 @@ void text_draw(Image font, char str[]) {
 // this auto-handles debug activation / deactivation for you.
 //
 // Of course, if your image font is broken, this won't work.
-void debug_manage(Image font) {
-  if(debug_options.active && debug_options.redraw) {
-    int i;
-    debug_options.active = 0;
-    erase(0,0,0,debug_options.bg_transparency);
+#ifdef DEBUG_ENABLED
+  void debug_manage(Image font) {
+    if(DBO.active && DBO.redraw) {
+      int i;
+      DBO.active = 0;
+      erase(0,0,0,DBO.bg_transparency);
 
-    for(i=0; i<DEBUG_STACK_SIZE; i++) {
-      char buf[100];
-      sprintf(buf, debug_options.format, debug_stack[i].state.priority, debug_stack[i].state.label, debug_stack[i].description);
-      text_draw_offset(font, buf, 0, i*font.height);
-      if(debug_stack[i].state.call != NULL) debug_stack[i].state.call();
+      for(i=0; i<DEBUG_STACK_SIZE; i++) {
+        text_draw_offset(font, DBO.stack[i], 0, i*font.height*font.scale);
+      }
+
+      DBO.redraw = 0;
+      DBO.active = 1;
     }
-
-    debug_options.redraw = 0;
-    debug_options.active = 1;
   }
-}
+#else
+  void debug_manage();
+#endif
 
 // (image manipulation)
 // ___
@@ -234,12 +262,10 @@ void debug_manage(Image font) {
 // truely handled during the draw-state using variables from the Image struct (I.E. Angle, rgb, scale).
 // This is so the image can be easily modified on the fly with code, and far more readable.
 
-Image image_setrgb(Image source, int r, int g, int b) {
-  Image new_image = source;
-  new_image.r = r;
-  new_image.g = g;
-  new_image.b = b;
-  return new_image;
+void image_setrgb(Image*source, int r, int g, int b) {
+  source->r = max(min(r,255), 0);
+  source->g = max(min(g,255), 0);
+  source->b = max(min(b,255), 0);
 }
 
 Image image_subimage(Image source, int X, int Y, int width, int height) {
@@ -250,7 +276,11 @@ Image image_subimage(Image source, int X, int Y, int width, int height) {
   new_image.original_height = height;
   new_image.width = new_image.original_width;
   new_image.height = new_image.original_height;
+  new_image.scale = source.scale;
   new_image.fix_canvas = source.fix_canvas;
+  new_image.r = source.r;
+  new_image.g = source.g;
+  new_image.b = source.b;
   return new_image;
 }
 
@@ -319,8 +349,6 @@ Image image_new(Image source, int width, int height) {
   for (i=0; i<new_image.width; i++) {
     new_image.data[i] = (struct Pixel*)malloc(new_image.height * sizeof(struct Pixel));
   }
-
-  debug_push(debug_info, "new image allocated");
   return new_image;
 }
 
@@ -341,6 +369,8 @@ Image make_font(Image source, int num_chars, char first_char) {
   Image new_image = source;
   new_image.characters = num_chars;
   new_image.first_character = first_char;
+  new_image.char_width  = (source.original_width / source.characters);
+  new_image.char_height = (source.original_height);
   return new_image;
 }
 
@@ -376,6 +406,10 @@ Image bmp_load(char source[]) {
     new_image.topleft.x = 0;
     new_image.topleft.y = 0;
     new_image.scale = 1;
+    new_image.char_height=0;
+    new_image.characters=0;
+    new_image.first_character=' ';
+    new_image.char_width=0;
     new_image.fix_canvas = 0;
 
     new_image.data = (struct Pixel**)malloc(new_image.width * sizeof(struct Pixel*));
@@ -398,8 +432,11 @@ Image bmp_load(char source[]) {
       if(padding != 0) fread(&temp, padding, 1, bmp_file);
     }
   }
+
+  sprintf(DBO.tbuffer, "BMP load \"%s\"", source);
+  sdebug("IMAGE", DBO.tbuffer);
+
   fclose(bmp_file);
-  debug_push(debug_load, source);
   return new_image;
 }
 

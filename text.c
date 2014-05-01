@@ -1,6 +1,16 @@
 // PRE-REQUISITES:
 // > main.c
 
+#ifndef GELIB_MAIN
+  #error This code requires MAIN.C to be included beforehand.
+#else
+  #ifndef GELIB_TEXT
+    #define GELIB_TEXT
+  #else
+    #error This file already exists in global code.
+  #endif
+#endif
+
 // (structs)
 // ____  _                   _
 /// ___|| |_ _ __ _   _  ___| |_ ___
@@ -30,6 +40,9 @@ int strlens(char source[]) {
     switch (c_text) {
       case '\a':
         result-=3;
+        break;
+      case '\t':
+        result-=4;
         break;
     }
   }
