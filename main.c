@@ -39,7 +39,9 @@ typedef void ARRAY_SIZE;
 // going to an error text file, E.g. just using debug
 // to display random messages
 // The define represents the filename
-#define DEBUG_USE_FILE "debug.txt"
+// #define DEBUG_USE_FILE "debug.txt"
+// (TODO: Make not crash on windows, apparently.)
+
 
 // Number of debug messages stored in memory
 // Minimum 1
