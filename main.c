@@ -39,9 +39,10 @@ typedef void ARRAY_SIZE;
 // going to an error text file, E.g. just using debug
 // to display random messages
 // The define represents the filename
-// #define DEBUG_USE_FILE "debug.txt"
+#define DEBUG_USE_FILE "debug.txt"
 
 // Number of debug messages stored in memory
+// Minimum 1
 #define DEBUG_STACK_SIZE 9
 
 // The max length of debug messages
@@ -111,6 +112,8 @@ typedef void ARRAY_SIZE;
       for(i=DEBUG_STACK_SIZE-1; i!=0; i--) {
         strcpy(DBO.stack[i], DBO.stack[i-1]);//, DEBUG_LEN);
       }
+      // Decides whether to write failed assertions and
+      // other details to files.
       #ifdef DEBUG_USE_FILE
       {
         FILE*debug_filestream;
@@ -163,7 +166,7 @@ int random(int lower, int upper) {
 //      // Do stuff
 //    }
 //  }
-int CloneCount(Actor source) {
+int clone_count(Actor source) {
   int highest_num=0, current_num=0, clones_found=0;
   Actor* current_clone;
   while(clones_found < ActorCount(source.name)) {

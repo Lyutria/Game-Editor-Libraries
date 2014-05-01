@@ -2,6 +2,11 @@
 // > main.c
 // > image.c
 
+// This code allows you to load an image using my functions, then export it
+// to a text file as code to load into Game-Editor afterwards. This lets you
+// convert an image into pure code which is inside Game-Editor, instead of an
+// external file.
+
 #if defined(GELIB_MAIN) && defined(GELIB_IMAGE)
   #ifndef GELIB_IMAGE_TO_CODE
     #define GELIB_IMAGE_TO_CODE
@@ -76,7 +81,7 @@ void image_to_code(Image source, char gen_name[], char file_name[], int mode) {
   }
 
   // Code prep
-  fprintf(dest_file, "// %s - IMGtoCODE conversion\n", source.name);
+  fprintf(dest_file, "// %s - IMGtoCODE conversion\n// MACHINE GENERATED CODE FOR AN IMAGE,\n// LOAD INTO GLOBAL CODE\n\n", source.name);
   fprintf(dest_file, "Image image_gen_%s() {\n", gen_name);
   fprintf(dest_file, "  Image gi;\n");
   fprintf(dest_file, "  int i, j;\n");

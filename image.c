@@ -37,19 +37,22 @@ typedef struct image_struct {
   int width;
   int height;
 
+  // Monitors topleft position to start in the loaded
+  // image array. Used for getting sections of images
+  // without using extra memory.
   struct {
     int x;
     int y;
   } topleft;
 
-  int angle; // Draw angle (only 90deg increments)
+  int angle; // Draw angle (only 90deg increments) (TODO)
   int fix_canvas; // If 1, use slow putpixel() instead of lineto() to fix canvas edge drawing.
 
   double scale; // Draw scale (1 is default)
 
   int characters; // # characters in font
   char first_character; // First char in font
-  int char_height;
+  int char_height; // These two lower the amount of calculations when drawing using imagefonts
   int char_width;
 
   short int r,g,b;
@@ -58,6 +61,9 @@ typedef struct image_struct {
 } Image;
 
 // For use with image_gridsplit
+// Allows you to easily split an image into precise rows&columns and then
+// access them. Used heavily for drawing GUI elements (break an image into
+// corners and sides to stretch)
 typedef struct image_grid_struct {
   Image** image;
   int rows;
@@ -80,6 +86,15 @@ typedef struct image_grid_struct {
 //|____/|_|  \__,_| \_/\_/ |_|_| |_|\__, |
 //                                  |___/
 
+// Our special putpixel function.
+// Every drawing function eventually reaches down to this, which is a replacement for the builtin
+// putpixel(). 
+// Preforms several special operations that give my library its power.
+// First, because of how much it can bottleneck, we do a check to make sure we're drawing on the canvas
+// in the first place, otherwise, cancel drawing that pixel and move on.
+// Second, choose between accurate mode, which uses putpixel() instead of lineto() to bypass a problem with
+// lineto() where it can't draw on the outermost pixels of a canvas.
+// Then we draw a pixel at location based on the parameters passed to the function.
 void putpixel_offset(double x_pos, double y_pos, double x_scale, double y_scale, int x_offset, int y_offset, int accurate) {
   double i,j;
   if (x_offset+x_pos*x_scale <= width && y_offset+y_pos*y_scale <= height) {
@@ -101,12 +116,17 @@ void putpixel_offset(double x_pos, double y_pos, double x_scale, double y_scale,
   }
 }
 
+// Used to draw any portion of an image (end result of image_draw, text_draw)
+// Passes to putpixel()
 void image_draw_section(Image source, int x_1, int y_1, int x_2, int y_2, int x_offset, int y_offset) {
   int i, j;
   int x1 = min(x_1, x_2), x2 = max(x_1, x_2);
   int y1 = min(y_1, y_2), y2 = max(y_1, y_2);
   int drawmode = 1;
 
+  // Checks if we need to use putpixel_offset.
+  // Because it's heavier than builtin putpixel, it's worth
+  // not using it if the image hasn't been modified at all.
   if(source.width == source.original_width &&
      source.height == source.original_height &&
      source.scale == 1) {
@@ -116,12 +136,17 @@ void image_draw_section(Image source, int x_1, int y_1, int x_2, int y_2, int x_
     drawmode=2;
   }
 
+  // Base drawing location on the topleft variables, usually
+  // set during image sectioning (for ImageGrids and whatnot)
   for(i=x1+source.topleft.x; i<x2+source.topleft.x; i++) {
     for(j=y1+source.topleft.y; j<y2+source.topleft.y; j++) {
       if(source.data[i][j].r != source.transparent.r ||
          source.data[i][j].g != source.transparent.g ||
          source.data[i][j].b != source.transparent.b) {
 
+        // Set the drawing color for the current pixel to the actual color
+        // modified by the Image structs RGB values, mimicing builtin actor
+        // coloring of GE.
         setpen((double)source.data[i][j].r*((double)source.r/(double)255.0),
                (double)source.data[i][j].g*((double)source.g/(double)255.0),
                (double)source.data[i][j].b*((double)source.b/(double)255.0), 0, 1);
@@ -145,19 +170,26 @@ void image_draw_section(Image source, int x_1, int y_1, int x_2, int y_2, int x_
   }
 }
 
+// Routes you to using image_draw_section, set to draw the whole image.
 void image_draw(Image source, int x_offset, int y_offset) {
   image_draw_section(source, 0,0, source.original_width, source.original_height, x_offset, y_offset);
 }
 
 // TODO: Add more styling methods, I.E. color code '\a898', tabs '\t', etc.
+// Iterates through the string you give it, and based on the number of characters
+// in the font, their width, and other factors, obtain the image from the source
+// based on the ASCII code of the letter.
 void text_draw_offset(Image cfont, char str[], int x_offset, int y_offset) {
   int x_pos=0, y_pos=0, i;
   int dchar_width, dchar_height;
   int ascii_code, or, og, ob;
+  // Hacky:
   or = cfont.r;
   og = cfont.g;
   ob = cfont.b;
 
+  // Process the DRAWING width of the characters, factors such as source image scale...
+  // Allows you to scale up text by modifying source image.
   dchar_width  = (cfont.original_width / cfont.characters) * (((double)cfont.width/(double)cfont.original_width)*cfont.scale);
   dchar_height = (cfont.original_height) * (((double)cfont.height/(double)cfont.original_height)*cfont.scale);
 
@@ -168,6 +200,9 @@ void text_draw_offset(Image cfont, char str[], int x_offset, int y_offset) {
         y_pos += 1;
         break;
 
+      // The main use for this is to allow programmers to use letters outside of normal char range
+      // (that is, 255 characters). This lets you use special characters designed into the font
+      // source image.
       case '\a': // ASCII CODE (A for ASCII)
         ascii_code = ctoi(str[i+1])*100 + ctoi(str[i+2])*10 + ctoi(str[i+3]);
 
@@ -187,6 +222,8 @@ void text_draw_offset(Image cfont, char str[], int x_offset, int y_offset) {
         x_pos += 1;
         break;
 
+      // Modifies the next set of drawn characters to the color set in text.
+      // Based on a pattern: "\aRGB", or for example, blue: "\a009"
       case '\t': // COLOR CHANGING (T for TINT)
         cfont.r = percent_of(what_percent_of(ctoi(str[i+1]), 9), 255);
         cfont.g = percent_of(what_percent_of(ctoi(str[i+2]), 9), 255);
@@ -262,12 +299,16 @@ void text_draw(Image font, char str[]) {
 // truely handled during the draw-state using variables from the Image struct (I.E. Angle, rgb, scale).
 // This is so the image can be easily modified on the fly with code, and far more readable.
 
+// Sets an images RGB values... simple shorthand.
 void image_setrgb(Image*source, int r, int g, int b) {
   source->r = max(min(r,255), 0);
   source->g = max(min(g,255), 0);
   source->b = max(min(b,255), 0);
 }
 
+// Creates a new Image struct pointing to the data in a different one.
+// How you manage this is on your own, but it won't memory leak because it doesn't
+// allocate new memory.
 Image image_subimage(Image source, int X, int Y, int width, int height) {
   Image new_image = source;
   new_image.topleft.x = X + source.topleft.x;
@@ -290,6 +331,9 @@ Image image_subimage(Image source, int X, int Y, int width, int height) {
 //  one section (i.e. topleft, topmid, topright, etc.) you can use
 //  image_gridsplit(button, 3, 3) to get an array of these sections
 //  quickly
+// You have to free it when you're done with it as a sacrifice for
+// the convinience of this sort of access. If you don't want that, manage
+// it using image_subimage yourself.
 ImageGrid image_gridsplit(Image source, int columns, int rows) {
   ImageGrid new_grid;
   int i, j;
@@ -315,6 +359,7 @@ ImageGrid image_gridsplit(Image source, int columns, int rows) {
   return new_grid;
 }
 
+// ALWAYS FREE YOUR IMAGEGRID or else you'll have memory leaks!
 void image_freegrid(ImageGrid*source) {
   int i;
   for(i=0;i<source->columns;i++) {
@@ -352,19 +397,19 @@ Image image_new(Image source, int width, int height) {
   return new_image;
 }
 
-
-/*
+// Not properly tested either, for removing an Image struct
+// after allocation.
 void image_delete(Image source) {
   int i, j;
-  for (i=0; i<source.original_width; i++) {
-    for(j=0; j<source.original_height; j++) {
+  for (i=0; i<*source.original_width; i++) {
+    for(j=0; j<*source.original_height; j++) {
       free(source.data[i][j]);
     }
   }
 }
-*/
 
-// Sets up an image's font values
+
+// Used to set an Image struct up to work as a font
 Image make_font(Image source, int num_chars, char first_char) {
   Image new_image = source;
   new_image.characters = num_chars;
