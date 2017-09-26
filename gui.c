@@ -437,7 +437,6 @@ void do_gui(char type[]) {
           char buffer[64];
           sprintf(buffer, "%d: %d, %d", this_e->set.meter.last_value, this_e->set.meter.value, this_e->set.meter.max);
           sdebug("METER", buffer);
-          erase(0,0,0,1);
           if(this_e->set.meter.last_value < this_e->set.meter.value) {
             // Redraw only second layer, it's increasing
             image_draw_3x3s(second_layer, (double)width*(double)(this_e->set.meter.value/this_e->set.meter.max), height);
@@ -491,7 +490,7 @@ void gui_mousedown() {
         this_e->set.window.state=2; // dragging
         mouse_to_actor();
         this_e->set.window.offset.x = xmouse;
-        this_e->set.window.offset.y = ymouse;
+        this_e->set.window.offset.y = ymouse+2;
         this_e->redraw=1;
         mouse_to_screen();
       }
