@@ -1,0 +1,1 @@
+aseprite.exe -b --split-slices gui_sheet.aseprite --save-as {slice}.bmp

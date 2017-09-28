@@ -45,6 +45,8 @@ typedef struct image_struct {
     int y;
   } topleft;
 
+  char is_subimage;
+
   int angle; // Draw angle (only 90deg increments) (TODO)
   int fix_canvas; // If 1, use slow putpixel() instead of lineto() to fix canvas edge drawing.
 
@@ -88,7 +90,7 @@ typedef struct image_grid_struct {
 
 // Our special putpixel function.
 // Every drawing function eventually reaches down to this, which is a replacement for the builtin
-// putpixel(). 
+// putpixel().
 // Preforms several special operations that give my library its power.
 // First, because of how much it can bottleneck, we do a check to make sure we're drawing on the canvas
 // in the first place, otherwise, cancel drawing that pixel and move on.
@@ -255,6 +257,18 @@ void text_draw(Image font, char str[]) {
   text_draw_offset(font, str, 0,0);
 }
 
+// Custom erase function because erase() doesn't respect
+// actor width & height.
+void image_erase(int r, int g, int b, double t) {
+  int i;
+  erase(0,0,0,1);
+  setpen(r,g,b,t,1);
+  for (i=0; i<width; i++) {
+    moveto(i,0);
+    lineto(i,height);
+  }
+}
+
 // This is here instead of drawing debug by hand because
 // the drawing commands call debug pushes, making it an infinite loop
 // this auto-handles debug activation / deactivation for you.
@@ -322,6 +336,10 @@ Image image_subimage(Image source, int X, int Y, int width, int height) {
   new_image.r = source.r;
   new_image.g = source.g;
   new_image.b = source.b;
+
+  // If not 0, the image is a subimage
+  // Get the depth of subimagery with this.
+  new_image.is_subimage = source.is_subimage + 1;
   return new_image;
 }
 
@@ -337,8 +355,8 @@ Image image_subimage(Image source, int X, int Y, int width, int height) {
 ImageGrid image_gridsplit(Image source, int columns, int rows) {
   ImageGrid new_grid;
   int i, j;
-  int ptw = (double)source.original_width/(double)columns;
-  int pth = (double)source.original_height/(double)rows;
+  int ptw = floor((double)source.original_width/(double)columns);
+  int pth = floor((double)source.original_height/(double)rows);
 
   new_grid.image = (Image**)malloc(columns * sizeof(Image*));
   for (i=0; i<columns; i++) {
@@ -360,7 +378,7 @@ ImageGrid image_gridsplit(Image source, int columns, int rows) {
 }
 
 // ALWAYS FREE YOUR IMAGEGRID or else you'll have memory leaks!
-void image_freegrid(ImageGrid*source) {
+void image_freegrid(ImageGrid* source) {
   int i;
   for(i=0;i<source->columns;i++) {
     free(source->image[i]);
@@ -384,28 +402,57 @@ void image_freegrid(ImageGrid*source) {
 
 // Allocates space for an image
 // Live loading might cause memory leaks, not properly tested.
-Image image_new(Image source, int width, int height) {
+Image image_new(int width, int height) {
   int i;
   Image new_image;
   new_image.width = width;
   new_image.height = height;
+  new_image.original_width = new_image.width;
+  new_image.original_height = new_image.height;
+  strcpy(new_image.name, "");
+  new_image.transparent.r = 0;
+  new_image.transparent.g = 0;
+  new_image.transparent.b = 0;
+  new_image.r = 255;
+  new_image.g = 255;
+  new_image.b = 255;
+  new_image.topleft.x = 0;
+  new_image.topleft.y = 0;
+  new_image.scale = 1;
+  new_image.char_height=0;
+  new_image.characters=0;
+  new_image.first_character=' ';
+  new_image.char_width=0;
+  new_image.fix_canvas = 0;
+  new_image.is_subimage = 0;
 
   new_image.data = (struct Pixel**)malloc(new_image.width * sizeof(struct Pixel*));
   for (i=0; i<new_image.width; i++) {
     new_image.data[i] = (struct Pixel*)malloc(new_image.height * sizeof(struct Pixel));
   }
+  sprintf(DBO.tbuffer, "Image created %dx%d", new_image.width, new_image.original_height);
+  sdebug("IMAGE", DBO.tbuffer);
   return new_image;
 }
 
-// Not properly tested either, for removing an Image struct
-// after allocation.
-void image_delete(Image source) {
+void image_delete(Image* source) {
   int i, j;
-  for (i=0; i<*source.original_width; i++) {
-    for(j=0; j<*source.original_height; j++) {
-      free(source.data[i][j]);
-    }
+
+  // If the image is a subimage, there's erasing it
+  // will only yield errors.
+  if (source->is_subimage) {
+    sprintf(DBO.tbuffer, "Image not unloaded [subimage]");
+    sdebug("IMAGE", DBO.tbuffer);
+    return;
   }
+
+  for (i=0; i<source->original_width; i++) {
+    free(source->data[i]);
+  }
+  free(source->data);
+
+  sprintf(DBO.tbuffer, "Image unloaded %dx%d", source->original_width, source->original_height);
+  sdebug("IMAGE", DBO.tbuffer);
 }
 
 
@@ -456,6 +503,7 @@ Image bmp_load(char source[]) {
     new_image.first_character=' ';
     new_image.char_width=0;
     new_image.fix_canvas = 0;
+    new_image.is_subimage = 0;
 
     new_image.data = (struct Pixel**)malloc(new_image.width * sizeof(struct Pixel*));
     for (i=0; i<new_image.width; i++) {
