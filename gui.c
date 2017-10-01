@@ -77,7 +77,7 @@ typedef struct gui {
   struct gui_theme* theme;
 
   char focus;
-  char disabled;
+  char enabled;
 
   Actor* bound_to; // A pointer to the actor that this element is bound to
   struct {
@@ -146,7 +146,6 @@ typedef struct gui {
     struct window { // A window container
       char text[256]; // Window Title
       char buttons[3]; // Up to 3 caption buttons in the top-right
-      short int active; // If window is shown at all
       short int fold; // If window should be folded.
       short int foldable;
       short int closable;
@@ -158,14 +157,14 @@ typedef struct gui {
         int y;
       } offset;
       struct {
-        int width;
-        int height;
+        short int width;
+        short int height;
       } max;
       struct {
-        int width;
-        int height;
+        short int width;
+        short int height;
       } min;
-      int state;
+      short int state;
     } window;
 
 
@@ -290,12 +289,17 @@ void bind_this_element_to(Actor*source, char dir[]) {
   if(source->animpos != 0) {
     if(get_element(source)->type == GUI_WINDOW) {
       if(get_element(source)->set.window.fold) { transp = 1; }
-      else if(!get_element(source)->set.window.active) { transp = 1; }
+      else if(!get_element(source)->enabled) { transp = 1; }
       else { transp = 0; }
+
+      if(this_e->focus) {
+        this_e->focus = 0;
+        get_element(this_e->bound_to)->focus = 1;
+      }
     }
   }
 
-  if (height != old_height || width != old_width || x != old_x || y != old_y) {
+  if(height != old_height || width != old_width || x != old_x || y != old_y) {
     this_e->redraw =1;
   }
 }
@@ -305,13 +309,13 @@ void redraw_element(Actor* source) {
 }
 
 void disable_element(Actor* source) {
-  get_element(source)->disabled = 1;
-  get_element(source)->redraw   = 1;
+  get_element(source)->enabled = 0;
+  get_element(source)->redraw  = 1;
 }
 
 void enable_element(Actor* source) {
-  get_element(source)->disabled = 0;
-  get_element(source)->redraw   = 1;
+  get_element(source)->enabled = 1;
+  get_element(source)->redraw  = 1;
 }
 
 void redraw_all_elements() {
@@ -362,13 +366,9 @@ void image_draw_3x3s(Image source, int width, int height) {
     igrid.image[2][1].height = height;
     igrid.image[0][1].height = height;
   }
-  if(height > igrid.row_size*2) {
-    image_draw(igrid.image[2][1], width-igrid.column_size, igrid.row_size);
-  }
+  image_draw(igrid.image[2][1], width-igrid.column_size, igrid.row_size);
   image_draw(igrid.image[0][1], 0,igrid.row_size);
-  if(width > igrid.column_size*2) {
-    image_draw(igrid.image[1][2], igrid.column_size,height-igrid.row_size);
-  }
+  image_draw(igrid.image[1][2], igrid.column_size,height-igrid.row_size);
   image_draw(igrid.image[1][0], igrid.column_size,0);
 
   // Draw corners
@@ -494,7 +494,7 @@ void do_gui(char type[]) {
     new_element.g = 255;
     new_element.b = 255;
     new_element.focus = 0;
-    new_element.disabled = 0;
+    new_element.enabled = 1;
     strncpy(new_element.owner, name, 16);
 
     params = sscanf(type, "%[^:]%*c%[^\n]", buffers[0], buffers[1]);
@@ -510,7 +510,7 @@ void do_gui(char type[]) {
     }
     else if (!strcmp(buffers[0], "window")) {
       new_element.type = GUI_WINDOW;
-      new_element.set.window.active=1;
+      new_element.enabled = 1;
       new_element.set.window.fold=0;
       new_element.set.window.closable=0;
       new_element.set.window.foldable=1;
@@ -570,6 +570,7 @@ void do_gui(char type[]) {
         else { new_state = 0; } // normal
       }
       else if(!hotspot(0,0,width,height)) { new_state = 0; }
+      if (!this_e->enabled) { new_state = 4; }
 
       if (this_e->set.button.state != new_state) {
         this_e->set.button.state = new_state;
@@ -577,8 +578,7 @@ void do_gui(char type[]) {
       }
 
       if (!this_e->redraw) break;
-      if (this_e->disabled) { button_mode = 4; }
-      else { button_mode = new_state; }
+      button_mode = new_state;
       current_button = image_subimage(this_e->theme->button, 0,button_height*(button_mode), button_width,button_height);
       image_setrgb(&current_button, this_e->r, this_e->g, this_e->b);
       erase(0,0,0,1);
@@ -605,7 +605,21 @@ void do_gui(char type[]) {
       int new_state   = this_e->set.window.state;
       Image current_window;
 
-      if(!this_e->set.window.active) { erase(0,0,0,1); break; }
+      if(!this_e->enabled) { erase(0,0,0,1); break; }
+
+      // If this window has focus, move to front
+      if (this_e->focus == 1) {
+        int i;
+        for(i=0; i<gui_options.num_elements; i++) {
+          if(gui_elements[i].type == GUI_WINDOW) {
+            ChangeZDepth(gui_elements[i].owner, 0.9);
+          }
+        }
+        ChangeZDepth("Event Actor", 1.0);
+
+        this_e->focus = 0;
+      }
+
       if(this_e->set.window.closable && hotspot(width-caption_width,0, width,caption_height)) {
         if(this_e->set.window.close_state != 2) { close_state = 1; }
       }
@@ -795,10 +809,15 @@ void do_gui(char type[]) {
 void gui_mousedown() {
   int new_state;
   gui* this_e = this_element();
+  int i;
+  for(i=0; i<gui_options.num_elements; i++) {
+    gui_elements[i].focus = 0;
+  }
+  this_e->focus = 1;
 
   switch(this_e->type) {
     case GUI_BUTTON:
-    { if(this_e->disabled) break;
+    { if(!this_e->enabled) break;
       this_e->set.button.state=2;
       this_e->redraw=1;
       break;
@@ -854,14 +873,6 @@ void gui_mousedown() {
         this_e->set.window.offset.x = xmouse-xscreen;
         this_e->set.window.offset.y = ymouse-yscreen;
         this_e->redraw=1;
-
-        // Lower other windows below this one
-        for(i=0; i<gui_options.num_elements; i++) {
-          if(gui_elements[i].type == GUI_WINDOW) {
-            ChangeZDepth(gui_elements[i].owner, 0.9);
-          }
-        }
-        ChangeZDepth("Event Actor", 1.0);
       }
       break;
     }
@@ -882,7 +893,7 @@ void gui_mouseup() {
     { const int caption_width  = this_e->theme->window_captions.original_width/3;
       const int caption_height = this_e->theme->window_captions.original_height/3;
       if(this_e->set.window.closable && hotspot(width-caption_width,0, width,caption_height)) {
-        this_e->set.window.active = 0;
+        this_e->enabled = 0;
       }
       if(this_e->set.window.foldable) {
         if(this_e->set.window.closable) {
