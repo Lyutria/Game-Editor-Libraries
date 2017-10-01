@@ -25,6 +25,9 @@
 //|_|  |_/_/   \_\___|_| \_|
 //
 
+// IMPORTANT
+#define GAME_FPS 60
+
 // Generic macros
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
 typedef void ARRAY_SIZE;
@@ -40,7 +43,7 @@ typedef void ARRAY_SIZE;
 // to display random messages
 // The define represents the filename
 // #define DEBUG_USE_FILE "debug.txt"
-// (TODO: Make not crash on windows, apparently.)
+// (Doesn't work on Game-Editor 1.4.1 Beta)
 
 
 // Number of debug messages stored in memory
@@ -80,6 +83,7 @@ typedef void ARRAY_SIZE;
     char redraw;
     double bg_transparency;
     int file_open;
+    FILE* stream;
     // Information
     char buffer[DEBUG_LEN];
     char tbuffer[DEBUG_LEN]; // For use when sprintf'ing a good debug message
@@ -118,16 +122,11 @@ typedef void ARRAY_SIZE;
       // other details to files.
       #ifdef DEBUG_USE_FILE
       {
-        FILE*debug_filestream;
-        if(DBO.file_open) {
-          debug_filestream = fopen(DEBUG_USE_FILE, "a");
+        if(!DBO.file_open) {
+          DBO.stream = fopen(DEBUG_USE_FILE, "w+");
+          DBO.file_open= 1;
         }
-        else {
-          debug_filestream = fopen(DEBUG_USE_FILE, "w");
-          DBO.file_open = 1;
-        }
-        fprintf(debug_filestream, "%s\n", DBO.buffer);
-        fclose(debug_filestream);
+        fprintf(DBO.stream, "%s\n", DBO.buffer);
       }
       #endif
 
@@ -160,6 +159,7 @@ int random(int lower, int upper) {
     return (rand(v1-v2)+v2);
 }
 
+// COMMENTED OUT DUE TO getclone2
 // Finds the highest clone index out of all clones
 // of an actor so you can loop through all the clones
 // faster, e.g.:
@@ -168,21 +168,21 @@ int random(int lower, int upper) {
 //      // Do stuff
 //    }
 //  }
-int clone_count(Actor source) {
-  int highest_num=0, current_num=0, clones_found=0;
-  Actor* current_clone;
-  while(clones_found < ActorCount(source.name)) {
-    current_clone = getclone2(source.name, current_num);
-    if(current_clone) {
-      clones_found++;
-      if(current_clone->cloneindex > highest_num) {
-        highest_num = current_clone->cloneindex;
-      }
-    }
-    current_num++;
-  }
-  return highest_num;
-}
+// int clone_count(Actor source) {
+//   int highest_num=0, current_num=0, clones_found=0;
+//   Actor* current_clone;
+//   while(clones_found < ActorCount(source.name)) {
+//     current_clone = getclone2(source.name, current_num);
+//     if(current_clone) {
+//       clones_found++;
+//       if(current_clone->cloneindex > highest_num) {
+//         highest_num = current_clone->cloneindex;
+//       }
+//     }
+//     current_num++;
+//   }
+//   return highest_num;
+// }
 
 // returns x% of 2nd param
 // returns -1 on fail

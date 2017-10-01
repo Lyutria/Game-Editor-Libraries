@@ -1,0 +1,82 @@
+IMAGE image.h 525: BMP load "img.bmp"
+DEBUG init 13: Images init
+IMAGE image.h 525: BMP load "gui_button.bmp"
+IMAGE image.h 525: BMP load "gui_window.bmp"
+IMAGE image.h 525: BMP load "gui_menu.bmp"
+IMAGE image.h 525: BMP load "gui_meter.bmp"
+IMAGE image.h 525: BMP load "gui_windowhighlight.bmp"
+DEBUG init 23: Gui init
+DEBUG: Debugger Init
+DEBUG: Image writer init
+ASCII: 032 [032]
+IMAGE image.h 450: Image unloaded 24x72
+IMAGE image.h 450: Image unloaded 48x144
+IMAGE image.h 450: Image unloaded 48x48
+IMAGE image.h 450: Image unloaded 48x48
+IMAGE image.h 450: Image unloaded 24x48
+IMAGE image.h 525: BMP load "gui_button.bmp"
+IMAGE image.h 525: BMP load "gui_window.bmp"
+IMAGE image.h 525: BMP load "gui_menu.bmp"
+IMAGE image.h 525: BMP load "gui_meter.bmp"
+IMAGE image.h 525: BMP load "gui_windowhighlight.bmp"
+IMAGE image.h 450: Image unloaded 24x72
+IMAGE image.h 450: Image unloaded 48x144
+IMAGE image.h 450: Image unloaded 48x48
+IMAGE image.h 450: Image unloaded 48x48
+IMAGE image.h 450: Image unloaded 24x48
+IMAGE image.h 525: BMP load "gui_button.bmp"
+IMAGE image.h 525: BMP load "gui_window.bmp"
+IMAGE image.h 525: BMP load "gui_menu.bmp"
+IMAGE image.h 525: BMP load "gui_meter.bmp"
+IMAGE image.h 525: BMP load "gui_windowhighlight.bmp"
+ASCII: 033 [033]
+ASCII: 034 [034]
+ASCII: 035 [035]
+ASCII: 036 [036]
+IMAGE image.h 450: Image unloaded 24x72
+IMAGE image.h 450: Image unloaded 48x144
+IMAGE image.h 450: Image unloaded 48x48
+IMAGE image.h 450: Image unloaded 48x48
+IMAGE image.h 450: Image unloaded 24x48
+IMAGE image.h 525: BMP load "gui_button.bmp"
+IMAGE image.h 525: BMP load "gui_window.bmp"
+IMAGE image.h 525: BMP load "gui_menu.bmp"
+IMAGE image.h 525: BMP load "gui_meter.bmp"
+IMAGE image.h 525: BMP load "gui_windowhighlight.bmp"
+IMAGE image.h 450: Image unloaded 24x72
+IMAGE image.h 450: Image unloaded 48x144
+IMAGE image.h 450: Image unloaded 48x48
+IMAGE image.h 450: Image unloaded 48x48
+IMAGE image.h 450: Image unloaded 24x48
+IMAGE image.h 525: BMP load "gui_button.bmp"
+IMAGE image.h 525: BMP load "gui_window.bmp"
+IMAGE image.h 525: BMP load "gui_menu.bmp"
+IMAGE image.h 525: BMP load "gui_meter.bmp"
+IMAGE image.h 525: BMP load "gui_windowhighlight.bmp"
+IMAGE image.h 450: Image unloaded 24x72
+IMAGE image.h 450: Image unloaded 48x144
+IMAGE image.h 450: Image unloaded 48x48
+IMAGE image.h 450: Image unloaded 48x48
+IMAGE image.h 450: Image unloaded 24x48
+IMAGE image.h 525: BMP load "gui_button.bmp"
+IMAGE image.h 525: BMP load "gui_window.bmp"
+IMAGE image.h 525: BMP load "gui_menu.bmp"
+IMAGE image.h 525: BMP load "gui_meter.bmp"
+IMAGE image.h 525: BMP load "gui_windowhighlight.bmp"
+IMAGE image.h 450: Image unloaded 24x72
+IMAGE image.h 450: Image unloaded 48x144
+IMAGE image.h 450: Image unloaded 48x48
+IMAGE image.h 450: Image unloaded 48x48
+IMAGE image.h 450: Image unloaded 24x48
+IMAGE image.h 525: BMP load "gui_button.bmp"
+IMAGE image.h 525: BMP load "gui_window.bmp"
+IMAGE image.h 525: BMP load "gui_menu.bmp"
+IMAGE image.h 525: BMP load "gui_meter.bmp"
+IMAGE image.h 525: BMP load "gui_windowhighlight.bmp"
+ASCII: 057 [057]
+ASCII: 058 [058]
+ASCII: 059 [059]
+ASCII: 060 [060]
+ASCII: 061 [061]
+ASCII: 062 [062]
+ASCII: 063 [063]

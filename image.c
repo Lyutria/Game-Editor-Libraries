@@ -11,6 +11,8 @@
   #endif
 #endif
 
+#define MAX_ANIMATION_LENGTH 64
+
 // IMAGE FONTS follow the ISO 8859-1 and Microsoft Windows Latin-1 code list as
 // found at http://ascii-code.com/
 // Please follow this format for creating your fonts.
@@ -25,6 +27,9 @@
 
 struct Pixel {
   unsigned char r,g,b;
+
+  // Uncomment when we need transparency.
+  // short double t;
 };
 
 typedef struct image_struct {
@@ -32,10 +37,10 @@ typedef struct image_struct {
 
   struct Pixel transparent; // Undrawn color
 
-  int original_width;
-  int original_height;
-  int width;
-  int height;
+  short int original_width;
+  short int original_height;
+  short int width;
+  short int height;
 
   // Monitors topleft position to start in the loaded
   // image array. Used for getting sections of images
@@ -45,17 +50,22 @@ typedef struct image_struct {
     int y;
   } topleft;
 
-  char is_subimage;
+  short int is_subimage;
 
-  int angle; // Draw angle (only 90deg increments) (TODO)
-  int fix_canvas; // If 1, use slow putpixel() instead of lineto() to fix canvas edge drawing.
+  short int angle; // Draw angle (only 90deg increments) (TODO)
+  short int fix_canvas; // If 1, use slow putpixel() instead of lineto() to fix canvas edge drawing.
 
   double scale; // Draw scale (1 is default)
 
-  int characters; // # characters in font
+  short int characters; // # characters in font
   char first_character; // First char in font
-  int char_height; // These two lower the amount of calculations when drawing using imagefonts
-  int char_width;
+  short int char_height; // These two lower the amount of calculations when drawing using imagefonts
+  short int char_width;
+
+  short int frames;
+  short int current_frame;
+  short int frame_speed[MAX_ANIMATION_LENGTH];
+  float frame_count;
 
   short int r,g,b;
 
@@ -68,10 +78,10 @@ typedef struct image_struct {
 // corners and sides to stretch)
 typedef struct image_grid_struct {
   Image** image;
-  int rows;
-  int columns;
-  int row_size;
-  int column_size;
+  unsigned short int rows;
+  unsigned short int columns;
+  unsigned short int row_size;
+  unsigned short int column_size;
 } ImageGrid;
 
 // (image drawing)
@@ -121,10 +131,13 @@ void putpixel_offset(double x_pos, double y_pos, double x_scale, double y_scale,
 // Used to draw any portion of an image (end result of image_draw, text_draw)
 // Passes to putpixel()
 void image_draw_section(Image source, int x_1, int y_1, int x_2, int y_2, int x_offset, int y_offset) {
-  int i, j;
-  int x1 = min(x_1, x_2), x2 = max(x_1, x_2);
-  int y1 = min(y_1, y_2), y2 = max(y_1, y_2);
+  const double x_scale = ((double)source.width/(double)source.original_width)*source.scale;
+  const double y_scale = ((double)source.height/(double)source.original_height)*source.scale;
+  const int x1 = min(x_1, x_2), x2 = max(x_1, x_2);
+  const int y1 = min(y_1, y_2), y2 = max(y_1, y_2);
+  int i, j, last_x=-1, last_y=-1;
   int drawmode = 1;
+  int count = 0;
 
   // Checks if we need to use putpixel_offset.
   // Because it's heavier than builtin putpixel, it's worth
@@ -132,19 +145,31 @@ void image_draw_section(Image source, int x_1, int y_1, int x_2, int y_2, int x_
   if(source.width == source.original_width &&
      source.height == source.original_height &&
      source.scale == 1) {
+    // Draw pixel for pixel from source
     drawmode=1;
   }
-  else {
+  else if (source.width >= source.original_width ||
+           source.height >= source.original_height) {
+    // Draw using draw-offset putpixel to scale pixels to the appropriate size
     drawmode=2;
+  } else {
+    // Sacrifice pixels for downscale speed (don't redraw over pixels)
+    drawmode=3;
   }
 
   // Base drawing location on the topleft variables, usually
   // set during image sectioning (for ImageGrids and whatnot)
   for(i=x1+source.topleft.x; i<x2+source.topleft.x; i++) {
+    const int x_pos = x_offset + (double)(i-x1-source.topleft.x)*x_scale;
+    if (last_x == x_pos) { last_x = x_pos; continue; }
+    last_x = x_pos;
+
     for(j=y1+source.topleft.y; j<y2+source.topleft.y; j++) {
       if(source.data[i][j].r != source.transparent.r ||
          source.data[i][j].g != source.transparent.g ||
          source.data[i][j].b != source.transparent.b) {
+
+        const int y_pos = y_offset + (double)(j-y1-source.topleft.y)*y_scale;
 
         // Set the drawing color for the current pixel to the actual color
         // modified by the Image structs RGB values, mimicing builtin actor
@@ -154,19 +179,40 @@ void image_draw_section(Image source, int x_1, int y_1, int x_2, int y_2, int x_
                (double)source.data[i][j].b*((double)source.b/(double)255.0), 0, 1);
 
         switch(drawmode) {
-          case 1:
+          case 1: // Same as source image, draw direct
             if(i-x1+x_offset-source.topleft.x > width) break;
             else if(j-y1+y_offset-source.topleft.y > height) break;
             putpixel(i-x1+x_offset-source.topleft.x, j-y1+y_offset-source.topleft.y);
             break;
 
-          case 2:
+          case 2: // Stretched in at least one direction, use
+                  // putpixel_offset to draw enlarged pixels
+            if (last_y == y_pos) { break; }
             putpixel_offset(i-x1-source.topleft.x, j-y1-source.topleft.y,
-              ((double)source.width/(double)source.original_width)*source.scale,
-              ((double)source.height/(double)source.original_height)*source.scale,
-              x_offset, y_offset, source.fix_canvas);
+                            x_scale, y_scale, x_offset, y_offset, source.fix_canvas);
+            break;
+
+          case 3: // Smaller than source image, use putpixel and discard extras.
+                  // Good for downscaling large images.
+                  // Sacrifices possibly important pixels, so is only used when
+                  // both width and height are lower than source.
+            if(x_offset + (double)(i-x1-source.topleft.x)*x_scale > width ||
+               y_offset + (double)(j-y1-source.topleft.y)*y_scale > height) break;
+            if (last_y == y_pos) { break; }
+            putpixel(x_pos, y_pos);
             break;
         }
+        last_y = y_pos;
+      }
+      else {
+        // If this vertical row contained a transparent pixel,
+        // sacrifice not drawing the next line to help.
+        last_x = -1;
+
+        // Fill in the last transparent pixel with the next possible pixel.
+        last_y = -1;
+
+        // Generally prioritize actual pixels over fully transparent ones.
       }
     }
   }
@@ -386,6 +432,29 @@ void image_freegrid(ImageGrid* source) {
   free(source->image);
 }
 
+// (image animation)
+// image_play_animation(source)
+void image_play_animation(Image* source, int x, int y, int draw) {
+  Image current_frame;
+  if (source->frame_count >= source->frame_speed[source->current_frame]) {
+    source->current_frame++;
+    if (source->current_frame == source->frames) source->current_frame = 0;
+    source->frame_count = 0;
+    draw = 1;
+  }
+  source->frame_count += (double)GAME_FPS / real_fps;
+
+  if (draw) {
+    image_erase(0,0,0,.99);
+    current_frame = image_subimage(*source, source->original_width/source->frames*source->current_frame,0,
+                                  source->original_width/source->frames,source->original_height);
+    current_frame.height = source->height;
+    current_frame.width  = source->width == source->original_width ? source->width/source->frames : source->width;
+    image_draw(current_frame, x, y);
+  }
+}
+
+
 // (image loading, creation)
 // ___
 //|_ _|_ __ ___   __ _  __ _  ___
@@ -400,31 +469,30 @@ void image_freegrid(ImageGrid* source) {
 //|_____\___/ \__,_|\__,_|_|_| |_|\__, |
 //                                |___/
 
-// Allocates space for an image
-// Live loading might cause memory leaks, not properly tested.
+// Allocates space for an blank image
 Image image_new(int width, int height) {
   int i;
   Image new_image;
-  new_image.width = width;
-  new_image.height = height;
-  new_image.original_width = new_image.width;
+  new_image.width           = width;
+  new_image.height          = height;
+  new_image.original_width  = new_image.width;
   new_image.original_height = new_image.height;
   strcpy(new_image.name, "");
-  new_image.transparent.r = 0;
-  new_image.transparent.g = 0;
-  new_image.transparent.b = 0;
-  new_image.r = 255;
-  new_image.g = 255;
-  new_image.b = 255;
-  new_image.topleft.x = 0;
-  new_image.topleft.y = 0;
-  new_image.scale = 1;
-  new_image.char_height=0;
-  new_image.characters=0;
-  new_image.first_character=' ';
-  new_image.char_width=0;
-  new_image.fix_canvas = 0;
-  new_image.is_subimage = 0;
+  new_image.transparent.r   = 0;
+  new_image.transparent.g   = 0;
+  new_image.transparent.b   = 0;
+  new_image.r               = 255;
+  new_image.g               = 255;
+  new_image.b               = 255;
+  new_image.topleft.x       = 0;
+  new_image.topleft.y       = 0;
+  new_image.scale           = 1;
+  new_image.char_height     = 0;
+  new_image.characters      = 0;
+  new_image.first_character = ' ';
+  new_image.char_width      = 0;
+  new_image.fix_canvas      = 0;
+  new_image.is_subimage     = 0;
 
   new_image.data = (struct Pixel**)malloc(new_image.width * sizeof(struct Pixel*));
   for (i=0; i<new_image.width; i++) {
@@ -454,7 +522,6 @@ void image_delete(Image* source) {
   sprintf(DBO.tbuffer, "Image unloaded %dx%d", source->original_width, source->original_height);
   sdebug("IMAGE", DBO.tbuffer);
 }
-
 
 // Used to set an Image struct up to work as a font
 Image make_font(Image source, int num_chars, char first_char) {
@@ -489,21 +556,21 @@ Image bmp_load(char source[]) {
     new_image.original_width = new_image.width;
     new_image.original_height = new_image.height;
     strcpy(new_image.name, source);
-    new_image.transparent.r = 0;
-    new_image.transparent.g = 0;
-    new_image.transparent.b = 0;
-    new_image.r = 255;
-    new_image.g = 255;
-    new_image.b = 255;
-    new_image.topleft.x = 0;
-    new_image.topleft.y = 0;
-    new_image.scale = 1;
-    new_image.char_height=0;
-    new_image.characters=0;
-    new_image.first_character=' ';
-    new_image.char_width=0;
-    new_image.fix_canvas = 0;
-    new_image.is_subimage = 0;
+    new_image.transparent.r   = 0;
+    new_image.transparent.g   = 0;
+    new_image.transparent.b   = 0;
+    new_image.r               = 255;
+    new_image.g               = 255;
+    new_image.b               = 255;
+    new_image.topleft.x       = 0;
+    new_image.topleft.y       = 0;
+    new_image.scale           = 1;
+    new_image.char_height     = 0;
+    new_image.characters      = 0;
+    new_image.first_character = ' ';
+    new_image.char_width      = 0;
+    new_image.fix_canvas      = 0;
+    new_image.is_subimage     = 0;
 
     new_image.data = (struct Pixel**)malloc(new_image.width * sizeof(struct Pixel*));
     for (i=0; i<new_image.width; i++) {
