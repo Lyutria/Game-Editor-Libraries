@@ -34,9 +34,12 @@ void image_to_code(Image source, char gen_name[], char file_name[]) {
 
   // Code prep
   fprintf(dest_file, "// %s - IMGtoCODE conversion\n// GENERATED CODE FOR AN IMAGE,\n// LOAD INTO GLOBAL CODE\n\n", source.name);
+  fprintf(dest_file, "// Shorthand to reduce file size\n");
+  fprintf(dest_file, "#define S(x,y,z)  i.data[x][y]=c[z];\n");
+  fprintf(dest_file, "#define M(a,b,c,d) for(x=0;x<d;x++) S(a,(b+x),c)\n\n");
   fprintf(dest_file, "int image_gen_%s(Image* destination) {\n", gen_name);
   fprintf(dest_file, "  Image  i;\n");
-  fprintf(dest_file, "  int x, y;\n\n");
+  fprintf(dest_file, "  int    x;\n\n");
 
   // Generate a color index to reduce code length
   fprintf(dest_file, "  // Color Index:\n");
@@ -45,12 +48,7 @@ void image_to_code(Image source, char gen_name[], char file_name[]) {
       int exists = 0;
 
       for (cur_index=0; cur_index<index_size; cur_index++) {
-        if (index[cur_index].r == source.data[x][y].r &&
-            index[cur_index].g == source.data[x][y].g &&
-            index[cur_index].b == source.data[x][y].b &&
-            index[cur_index].t == source.data[x][y].t) {
-              exists = 1;
-        }
+        if (pixel_compare(source.data[x][y], index[cur_index])) { exists = 1; }
       }
 
       if (!exists) {
@@ -94,7 +92,7 @@ void image_to_code(Image source, char gen_name[], char file_name[]) {
   fprintf(dest_file, "  i.transparent.g   = %d;\n", source.transparent.g);
   fprintf(dest_file, "  i.transparent.b   = %d;\n", source.transparent.b);
   fprintf(dest_file, "  i.indexed         = %d;\n", source.indexed);
-  fprintf(dest_file, "  i.font            = '%d';\n", source.font);
+  fprintf(dest_file, "  i.font            = %d;\n", source.font);
 
   // TODO: Save animation information
   // fprintf(dest_file, "  gi.animation       = %d;\n", source.animation)
@@ -112,18 +110,26 @@ void image_to_code(Image source, char gen_name[], char file_name[]) {
   fprintf(dest_file, "\n  ");
   for(x=source.topleft.x; x<source.original_width; x++) {
     for(y=source.topleft.y; y<source.original_height; y++){
+      int seq_chunk=1;
       for (cur_index=0; cur_index<index_size; cur_index++) {
-        if (source.data[x][y].r == index[cur_index].r &&
-            source.data[x][y].g == index[cur_index].g &&
-            source.data[x][y].b == index[cur_index].b &&
-            source.data[x][y].t == index[cur_index].t) {
-          break;
-        }
+        if (pixel_compare(source.data[x][y], index[cur_index])) { break; }
       }
 
-      fprintf(dest_file, "i.data[%d][%d]=c[%d];", x,y, cur_index);
+      // If the next pixel in the column is also the same pixel, start
+      // scanning for a consecutive chunk.
+      if (y < source.original_height-1 && pixel_compare(source.data[x][y+1], index[cur_index])) {
+        while (y+seq_chunk <= source.original_height-1 &&
+               pixel_compare(source.data[x][y+seq_chunk], index[cur_index])) {
+          seq_chunk++;
+        }
 
-      if (newline_count++ == 6) {
+        fprintf(dest_file, "M(%d,%d,%d,%d) ", x,y, cur_index, seq_chunk);
+
+        y += seq_chunk-1;
+      }
+      else { fprintf(dest_file, "S(%d,%d,%d) ", x,y, cur_index); }
+
+      if (newline_count++ == 8) {
         fprintf(dest_file, "\n  ");
         newline_count = 0;
       }
@@ -131,7 +137,9 @@ void image_to_code(Image source, char gen_name[], char file_name[]) {
   }
 
   fprintf(dest_file, "\n  *destination = i;");
-  fprintf(dest_file, "\n  return 1;\n}");
+  fprintf(dest_file, "\n  return 1;\n}\n\n");
+  fprintf(dest_file, "#undef S\n");
+  fprintf(dest_file, "#undef M\n");
   free(index);
   fclose(dest_file);
 }

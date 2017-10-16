@@ -410,6 +410,16 @@ void image_setrgb(Image*source, int r, int g, int b) {
   source->b = max(min(b,255), 0);
 }
 
+int pixel_compare(Pixel p1, Pixel p2) {
+  if (p1.r != p2.r ||
+      p1.g != p2.g ||
+      p1.b != p2.b ||
+      p1.t != p2.t) {
+    return 0;
+  }
+  return 1;
+}
+
 // Converts an image to use a palette
 // Can only be used on non-subimages
 // TODO
