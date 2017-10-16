@@ -24,102 +24,114 @@
 // This will create a function that stores a variable color index,
 // and manually assign all the pixels through the function.
 
-void image_to_code(Image source, char gen_name[], char file_name[], int mode) {
-  FILE* dest_file = fopen(file_name, "w");
-  int i, j, k, newline_count=0;
-  int index_size;
-  Pixel index[1024];
+void image_to_code(Image source, char gen_name[], char file_name[]) {
+  int cur_index=0, index_size=0, x=0, y=0, newline_count=0;
+  FILE*  dest_file = fopen(file_name, "w");
+  Pixel* index = (Pixel*)calloc(1, sizeof(Pixel));
 
-  for(i=0; i<1024; i++) {
-    color_index[i][0] = source.transparent.r;
-    color_index[i][1] = source.transparent.g;
-    color_index[i][2] = source.transparent.b;
-  }
-
-  for(i=0; i<source.original_width; i++) {
-    for(j=0; j<source.original_height; j++){
-    }
-  }
+  if (source.subimage) { debugf("IMG2CODE", "Source is a subimage"); }
+  if (!source.data)    { debugf("IMG2CODE", "No data in source"); return; }
 
   // Code prep
   fprintf(dest_file, "// %s - IMGtoCODE conversion\n// GENERATED CODE FOR AN IMAGE,\n// LOAD INTO GLOBAL CODE\n\n", source.name);
-  fprintf(dest_file, "Image image_gen_%s() {\n", gen_name);
-  fprintf(dest_file, "  Image gi;\n");
-  fprintf(dest_file, "  int i, j;\n");
-  fprintf(dest_file, "  // Color Index:\n");
+  fprintf(dest_file, "int image_gen_%s(Image* destination) {\n", gen_name);
+  fprintf(dest_file, "  Image  i;\n");
+  fprintf(dest_file, "  int x, y;\n\n");
 
   // Generate a color index to reduce code length
-  if(mode == 1) {
-    for(i=0; i<index_counter; i++) {
-      fprintf(dest_file, "  Pixel c%d = {%d,%d,%d,%f};\n", i, color_index[i][0], color_index[i][1], color_index[i][2]);
-    }
-  }
+  fprintf(dest_file, "  // Color Index:\n");
+  for(x=source.topleft.x; x<source.original_width; x++) {
+    for(y=source.topleft.y; y<source.original_height; y++){
+      int exists = 0;
 
-  fprintf(dest_file, "  strcpy(gi.name, \"%s\");\n", gen_name);
-  fprintf(dest_file, "  gi.width = %d; gi.original_width = gi.width;\n", source.original_width);
-  fprintf(dest_file, "  gi.height = %d; gi.original_height = gi.height;\n", source.original_height);
-  fprintf(dest_file, "  gi.angle=0;\n");
-  fprintf(dest_file, "  gi.r=255;\n");
-  fprintf(dest_file, "  gi.g=255;\n");
-  fprintf(dest_file, "  gi.b=255;\n");
-  fprintf(dest_file, "  gi.scale=1;\n");
-  fprintf(dest_file, "  gi.transparent.r=%d;\n", source.transparent.r);
-  fprintf(dest_file, "  gi.transparent.g=%d;\n", source.transparent.g);
-  fprintf(dest_file, "  gi.transparent.b=%d;\n", source.transparent.b);
-  fprintf(dest_file, "  gi.characters=%d;\n", source.characters);
-  if(!source.first_character) source.first_character = ' ';
-  fprintf(dest_file, "  gi.first_character='%c';\n", source.first_character);
-  fprintf(dest_file, "  gi.data = (struct Pixel**)malloc(gi.width * sizeof(struct Pixel*));\n");
-  fprintf(dest_file, "  for (i=0; i<gi.width; i++) {\n");
-  fprintf(dest_file, "    gi.data[i] = (struct Pixel*)malloc(gi.height * sizeof(struct Pixel));\n  }\n");
-
-  fprintf(dest_file, "  for (i=0; i<gi.width; i++) {\n");
-  fprintf(dest_file, "    for (j=0; j<gi.height; j++) {\n");
-  fprintf(dest_file, "      gi.data[i][j] = gi.transparent;\n");
-  fprintf(dest_file, "    }\n");
-  fprintf(dest_file, "  }\n");
-
-  for(i=0; i<source.original_width; i++) {
-    for(j=0; j<source.original_height; j++ ){
-      if(source.data[i][j].r != source.transparent.r &&
-         source.data[i][j].g != source.transparent.g &&
-         source.data[i][j].b != source.transparent.b) {
-        switch(mode) {
-        case 0:
-          fprintf(dest_file, "  gi.data[%d][%d].r=%d;", i, j, source.data[i][j].r);
-          fprintf(dest_file, "gi.data[%d][%d].g=%d;", i, j, source.data[i][j].g);
-          fprintf(dest_file, "gi.data[%d][%d].b=%d;", i, j, source.data[i][j].b);
-          newline_count++;
-          if(newline_count==3) {
-            fprintf(dest_file, "\n");
-            newline_count=0;
-          }
-          break;
-
-        case 1:
-          for(k=0; k<index_counter; k++) {
-            if(source.data[i][j].r == color_index[k][0] &&
-               source.data[i][j].g == color_index[k][1] &&
-               source.data[i][j].b == color_index[k][2]) {
-              fprintf(dest_file, "gi.data[%d][%d]=c%d;", i, j, k);
-              break;
-            }
-          }
-
-          newline_count++;
-          if(newline_count==6) {
-            fprintf(dest_file, "\n  ");
-            newline_count=0;
-          }
-          break;
-
-        default:
-          break;
+      for (cur_index=0; cur_index<index_size; cur_index++) {
+        if (index[cur_index].r == source.data[x][y].r &&
+            index[cur_index].g == source.data[x][y].g &&
+            index[cur_index].b == source.data[x][y].b &&
+            index[cur_index].t == source.data[x][y].t) {
+              exists = 1;
         }
+      }
+
+      if (!exists) {
+        index_size++;
+        index = (Pixel*)realloc(index, (sizeof(Pixel) * index_size));
+        index[index_size-1] = source.data[x][y];
       }
     }
   }
 
-  fprintf(dest_file, "\n  return gi;\n}");
+  fprintf(dest_file, "  Pixel c[%d] = {\n    ", index_size);
+  for (cur_index=0; cur_index<index_size; cur_index++) {
+    if (cur_index == index_size-1) {
+      fprintf(dest_file, "{%d,%d,%d,%i}\n  };\n\n",
+        index[cur_index].r,
+        index[cur_index].g,
+        index[cur_index].b,
+        index[cur_index].t
+      );
+      break;
+    }
+
+    fprintf(dest_file, "{%d,%d,%d,%i},",
+      index[cur_index].r,
+      index[cur_index].g,
+      index[cur_index].b,
+      index[cur_index].t
+    );
+
+    if (cur_index % 10 == 0 && cur_index != 0) { fprintf(dest_file, "\n    "); }
+  }
+
+  fprintf(dest_file, "  if (destination->data != NULL && !destination->subimage) {\n");
+  fprintf(dest_file, "    image_free(destination); \n  }\n\n");
+
+
+
+  fprintf(dest_file, "  image_new(&i, %d, %d);\n",  source.original_width, source.original_height);
+  fprintf(dest_file, "  strcpy(i.name, \"%s\");\n", gen_name);
+  fprintf(dest_file, "  i.transparent.r   = %d;\n", source.transparent.r);
+  fprintf(dest_file, "  i.transparent.g   = %d;\n", source.transparent.g);
+  fprintf(dest_file, "  i.transparent.b   = %d;\n", source.transparent.b);
+  fprintf(dest_file, "  i.indexed         = %d;\n", source.indexed);
+  fprintf(dest_file, "  i.font            = '%d';\n", source.font);
+
+  // TODO: Save animation information
+  // fprintf(dest_file, "  gi.animation       = %d;\n", source.animation)
+  // fprintf(dest_file, "  gi.frames          = %d;\n", source.frames)
+  // fprintf(dest_file, "  gi.frame_count     = %d;\n", source.frame_count)
+  // fprintf(dest_file, "  gi.frame_speed     = %d;\n", source.animation)
+
+  fprintf(dest_file, "  i.characters      = %d;\n",   source.characters);
+  fprintf(dest_file, "  i.first_character = '%c';\n", source.first_character);
+  fprintf(dest_file, "  i.char_width      = %d;\n", source.char_width);
+  fprintf(dest_file, "  i.char_height     = %d;\n", source.char_height);
+
+  // TODO: Save palette information (after palettes are added)
+
+  fprintf(dest_file, "\n  ");
+  for(x=source.topleft.x; x<source.original_width; x++) {
+    for(y=source.topleft.y; y<source.original_height; y++){
+      for (cur_index=0; cur_index<index_size; cur_index++) {
+        if (source.data[x][y].r == index[cur_index].r &&
+            source.data[x][y].g == index[cur_index].g &&
+            source.data[x][y].b == index[cur_index].b &&
+            source.data[x][y].t == index[cur_index].t) {
+          break;
+        }
+      }
+
+      fprintf(dest_file, "i.data[%d][%d]=c[%d];", x,y, cur_index);
+
+      if (newline_count++ == 6) {
+        fprintf(dest_file, "\n  ");
+        newline_count = 0;
+      }
+    }
+  }
+
+  fprintf(dest_file, "\n  *destination = i;");
+  fprintf(dest_file, "\n  return 1;\n}");
+  free(index);
   fclose(dest_file);
 }
