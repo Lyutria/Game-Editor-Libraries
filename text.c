@@ -1,3 +1,5 @@
+// C-lib: TEXT
+
 // PRE-REQUISITES:
 // > main.c
 
@@ -11,12 +13,9 @@
   #endif
 #endif
 
-// (structs)
-// ____  _                   _
-/// ___|| |_ _ __ _   _  ___| |_ ___
-//\___ \| __| '__| | | |/ __| __/ __|
-// ___) | |_| |  | |_| | (__| |_\__ \
-//|____/ \__|_|   \__,_|\___|\__|___/
+//  __  ___  __        __  ___  __
+// /__`  |  |__) |  | /  `  |  /__`
+// .__/  |  |  \ \__/ \__,  |  .__/
 //
 
 typedef struct TextFile {
@@ -25,13 +24,12 @@ typedef struct TextFile {
   int lines;
 } TextFile;
 
-// _____                 _   _
-//|  ___|   _ _ __   ___| |_(_) ___  _ __  ___
-//| |_ | | | | '_ \ / __| __| |/ _ \| '_ \/ __|
-//|  _|| |_| | | | | (__| |_| | (_) | | | \__ \
-//|_|   \__,_|_| |_|\___|\__|_|\___/|_| |_|___/
+//                    __                 ___    __
+//  |\/|  /\  |\ | | |__) |  | |     /\   |  | /  \ |\ |
+//  |  | /~~\ | \| | |    \__/ |___ /~~\  |  | \__/ | \|
 //
 
+// This is used to calculate
 int strlens(char source[]) {
   int i, result;
   result = strlen(source);
@@ -40,6 +38,13 @@ int strlens(char source[]) {
     switch (c_text) {
       case '\a':
         result-=3;
+        i += 3;
+        break;
+      case '\r':
+        if (source[i+1] == '+' || source[i+1] == '-') { result-=2; i+=2; }
+        else { result-=1; i+=1; }
+        if (source[i+1] == '+' || source[i+1] == '-') { result-=2; i+=2; }
+        else { result-=1; i+=1; }
         break;
       case '\t':
         result-=4;
@@ -63,7 +68,7 @@ char* float_to_str(float val) {
     return buf;
 }
 
-void strinsert(char* dest, int pos, char* in) {
+void strninsert(char* dest, int pos, char* in) {
   char firsthalf[255], secondhalf[255];
   int i;
 
@@ -110,11 +115,9 @@ char chrlower(char source) {
   return source;
 }
 
-// _____ _ _
-//|  ___(_) | ___
-//| |_  | | |/ _ \
-//|  _| | | |  __/
-//|_|   |_|_|\___|
+//  ___         ___
+// |__  | |    |__
+// |    | |___ |___
 //
 
 TextFile text_load(char filename[]) {

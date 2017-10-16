@@ -8,8 +8,6 @@ Game-Editor is a multi-platform 2D game development tool with exports to: Window
 ### What's there right now?
 There's currently two versions. The one in the root directory is currently being developed, and under _bin_ you can find an example source .ged and an .exe that is compiled before I commit, so it will usually be up to date. That as well as various images that are used in the program.
 
-The _old_ folder contains the many year old ltCanvas tools library and the old documentation HTML I wrote for it. The old version currently has more GUI elements and is generally complete, but contains less advanced features, properties, image loading, etc.
-
 ### What can it do?
 Not too much yet, honestly. The project is just starting up. The gist of it is the following features:
 - Load images (BMP 24/32 currently) into a full-featured struct with properties like width/height for drawing.

@@ -1,6 +1,10 @@
+// C-lib: IMAGE CONVERTER
+
 // PRE-REQUISITES:
 // > main.c
 // > image.c
+
+// This code will not function in Game-Editor 1.4.1b, due to a file write issue.
 
 // This code allows you to load an image using my functions, then export it
 // to a text file as code to load into Game-Editor afterwards. This lets you
@@ -17,71 +21,28 @@
   #error This code requires MAIN.C, IMAGE.C to be included beforehand.
 #endif
 
-// This uses the NAME property of the IMAGE, so you'll need
-// to make sure the name is proper for an variable and function.
-//
-// This requires to use of the "init" style function, as it
-// generates a function to generate the image.
-//
-// MODE 0 is neutral (per pixel) mode, worse in virtually every situation except for
-//        low memory limits.
-// MODE 1 creates a variable color index, better for images especially with few colors
-//        You can only use MODE 1 for images up to 1024 colors, but just modify the limit
-//        below to get more.
+// This will create a function that stores a variable color index,
+// and manually assign all the pixels through the function.
 
 void image_to_code(Image source, char gen_name[], char file_name[], int mode) {
   FILE* dest_file = fopen(file_name, "w");
   int i, j, k, newline_count=0;
-  int color_index[1024][3], index_counter = 0, index_found=0;
+  int index_size;
+  Pixel index[1024];
 
-  if(mode == 1) {
-    for(i=0; i<1024; i++) {
-      color_index[i][0] = source.transparent.r;
-      color_index[i][1] = source.transparent.g;
-      color_index[i][2] = source.transparent.b;
-    }
+  for(i=0; i<1024; i++) {
+    color_index[i][0] = source.transparent.r;
+    color_index[i][1] = source.transparent.g;
+    color_index[i][2] = source.transparent.b;
+  }
 
-    for(i=0; i<source.original_width; i++) {
-      for(j=0; j<source.original_height; j++){
-        index_found=0;
-        if(source.data[i][j].r != source.transparent.r &&
-           source.data[i][j].g != source.transparent.g &&
-           source.data[i][j].b != source.transparent.b) {
-
-          k=0;
-          while(color_index[k][0] != source.transparent.r ||
-                color_index[k][1] != source.transparent.g ||
-                color_index[k][2] != source.transparent.b) {
-            if(color_index[k][0] == source.data[i][j].r &&
-               color_index[k][1] == source.data[i][j].g &&
-               color_index[k][2] == source.data[i][j].b) {
-              index_found=1;
-              break;
-            }
-            k++;
-            if(k > 1023) {
-              // Cancel indexing mode, too many colors
-              mode = 0;
-              break;
-            }
-          }
-
-          if(mode==0) break;
-
-          if(!index_found) {
-            color_index[k][0] = source.data[i][j].r;
-            color_index[k][1] = source.data[i][j].g;
-            color_index[k][2] = source.data[i][j].b;
-            index_counter++;
-          }
-        }
-      }
-    if(mode==0) break;
+  for(i=0; i<source.original_width; i++) {
+    for(j=0; j<source.original_height; j++){
     }
   }
 
   // Code prep
-  fprintf(dest_file, "// %s - IMGtoCODE conversion\n// MACHINE GENERATED CODE FOR AN IMAGE,\n// LOAD INTO GLOBAL CODE\n\n", source.name);
+  fprintf(dest_file, "// %s - IMGtoCODE conversion\n// GENERATED CODE FOR AN IMAGE,\n// LOAD INTO GLOBAL CODE\n\n", source.name);
   fprintf(dest_file, "Image image_gen_%s() {\n", gen_name);
   fprintf(dest_file, "  Image gi;\n");
   fprintf(dest_file, "  int i, j;\n");
@@ -90,7 +51,7 @@ void image_to_code(Image source, char gen_name[], char file_name[], int mode) {
   // Generate a color index to reduce code length
   if(mode == 1) {
     for(i=0; i<index_counter; i++) {
-      fprintf(dest_file, "  struct Pixel c%d = {%d,%d,%d};\n", i, color_index[i][0], color_index[i][1], color_index[i][2]);
+      fprintf(dest_file, "  Pixel c%d = {%d,%d,%d,%f};\n", i, color_index[i][0], color_index[i][1], color_index[i][2]);
     }
   }
 
