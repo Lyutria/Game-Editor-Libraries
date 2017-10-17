@@ -242,7 +242,7 @@ int image_draw(Image source, int x_offset, int y_offset) {
 // based on the ASCII code of the letter.
 //  Returns 0 on halting error
 //  Returns 1 on success
-int text_draw_offset(Image cfont, char str[], int x_offset, int y_offset) {
+int text_draw_offset(Image cfont, char* str, int x_offset, int y_offset) {
   int x_pos=0, y_pos=0, i;
   int x_move=0, y_move=0;
   int dchar_width, dchar_height;
@@ -339,7 +339,7 @@ int text_draw_offset(Image cfont, char str[], int x_offset, int y_offset) {
   return 1;
 }
 
-int text_draw(Image font, char str[]) {
+int text_draw(Image font, char* str) {
   return text_draw_offset(font, str, 0,0);
 }
 
@@ -583,9 +583,6 @@ Image* image_new(Image* destination, int width, int height) {
       debugf("IMAGE NEW", "Destination has data, freeing");
       image_free(destination);
     }
-    else {
-      debugf("IMAGE NEW", "Destination is subimage");
-    }
   }
 
   destination->width           = width;
@@ -646,9 +643,6 @@ Image* bmp_load(char source[], Image* destination) {
     if (destination->subimage) {
       debugf("BMP LOAD", "Destination has data, freeing");
       image_free(destination);
-    }
-    else {
-      debugf("BMP LOAD", "Destination is subimage");
     }
   }
 

@@ -4,6 +4,11 @@
 // > main.c
 // > image.c
 
+//               __   ___    ___  __      __   __   __   ___
+// |  |\/|  /\  / _` |__      |  /  \    /  ` /  \ |  \ |__
+// |  |  | /~~\ \__> |___     |  \__/    \__, \__/ |__/ |___
+//
+
 // This code will not function in Game-Editor 1.4.1b, due to a file write issue.
 
 // This code allows you to load an image using my functions, then export it

@@ -29,7 +29,8 @@ typedef struct TextFile {
 //  |  | /~~\ | \| | |    \__/ |___ /~~\  |  | \__/ | \|
 //
 
-// This is used to calculate
+// This is used to calculate visual length for
+// our special-format strings used in the library.
 int strlens(char source[]) {
   int i, result;
   result = strlen(source);
@@ -54,33 +55,41 @@ int strlens(char source[]) {
   return result;
 }
 
-char* int_to_str(int val) {
-    // Creates a string using sprintf
-    char buf[128];
-    sprintf(buf, "%d", val);
-    return buf;
+void strinsert(char* dest, int pos, char* in) {
+  char* result = malloc(sizeof(char)*(strlen(dest)+strlen(in)));
+
+  strncpy(result, dest, pos);
+  strcat (result, in);
+  strcat (result, dest+pos+1);
+
+  strcpy(dest, result);
+  free(result);
 }
 
-char* float_to_str(float val) {
-    // Creates a string using sprintf
-    char buf[128];
-    sprintf(buf, "%f", val);
-    return buf;
+void strninsert(char* dest, int pos, char* in, int max) {
+  char* result = malloc(sizeof(char)*(strlen(dest)+strlen(in)));
+
+  strncpy(result, dest, pos);
+  strcat (result, in);
+  strcat (result, dest+pos+1);
+
+  strncpy(dest, result, max);
+  free(result);
 }
 
-void strninsert(char* dest, int pos, char* in) {
-  char firsthalf[255], secondhalf[255];
-  int i;
-
-  strncpy(firsthalf, dest, pos);
-
-  for (i=0; i<(strlen(dest)-pos); i++) {
-      secondhalf[i] = dest[i+pos];
+void chrinsert(char* dest, int pos, char in) {
+  int index;
+  for (index=strlen(dest)+1; index>pos; index--) {
+    dest[index] = dest[index-1];
   }
+  dest[pos] = in;
+}
 
-  strcat(firsthalf, in);
-  strcat(firsthalf, secondhalf);
-  strcpy(dest, firsthalf);
+void chrremove(char* source, int pos) {
+  int index;
+  for (index=pos; index<strlen(source); index++) {
+    source[index] = source[index+1];
+  }
 }
 
 int strend(char source[], char check[]) {

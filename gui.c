@@ -28,6 +28,7 @@ typedef enum gui_type {
   GUI_METER,
   GUI_WINDOW,
   GUI_LABEL,
+  GUI_TEXTBOX,
   GUI_TOGGLE,
   GUI_COUNTER,
   GUI_TOOLTIP,
@@ -49,7 +50,7 @@ typedef struct gui_theme {
 
   Image slider;
   short int slider_offset; // pixels to use as margin for inner slider
-  short int slider_handle_width;   // pixel size for handle
+  short int slider_handle_width; // pixel size for handle
 
   Image meter;
   short int meter_offset; // pixels to use as margin for inner meter
@@ -124,14 +125,14 @@ typedef struct gui_element {
 
     struct textbox { // Fully usuable text box
       char* text;
-      char right_delimiter; // Text for the "enter" button
-      char caret_pos; // Stores cursor/caret position
-      short int active; // Stores if it has focus
-      short int caret_blink; // Manages caret blinking speed
-      char letters; // Four variables to check allowed characters
-      char numbers;
-      char symbols;
-      char whitespace;
+      int   max_size;
+      int   last_max;
+      int   shift;
+      int   caret_pos; // Stores cursor/caret position
+      short int caret_blink_speed; // Manages caret blinking speed
+      short int caret_timer;
+      char limit_input; // if active, only allow characters from allowed_symbols
+      char allowed_symbols[256];
     } textbox;
 
 
@@ -194,9 +195,10 @@ typedef struct gui_element {
 
 struct {
   GUIElement* elements; // Dynamic array of GUI elements, to hold them between frames.
-  GUITheme    theme;         // Main theme elements default to
-  int num_elements;         // Stores the current number of GUI elements
+  GUITheme    theme;    // Main theme elements default to
+  int num_elements;     // Stores the current number of GUI elements
   int mouse_state;
+  char clipboard[512];  // Stores program clipboard for text elements
 } GUIData;
 
 //  __   __       ___  __   __           ___            __
@@ -225,15 +227,14 @@ int hotspot(int x1, int y1, int x2, int y2) {
 
 
 GUIElement* this_element() {
+  if (GUI_ID == 0) { return NULL; }
   return &GUIData.elements[(int)GUI_ID-1];
 }
 
 
 GUIElement* get_element(Actor*source) {
-  if (source->GUI_ID != 0) {
-    return &GUIData.elements[(int)source->GUI_ID-1];
-  }
-  else return NULL;
+  if (source->GUI_ID == 0) { return NULL; }
+  return &GUIData.elements[(int)source->GUI_ID-1];
 }
 
 
@@ -299,7 +300,6 @@ void bind_this_element_to(Actor*source, char dir[]) {
       else { transp = 0; }
 
       if(this_e->focus) {
-        this_e->focus = 0;
         get_element(this_e->bound_to)->focus = 1;
       }
     }
@@ -312,17 +312,20 @@ void bind_this_element_to(Actor*source, char dir[]) {
 
 
 void redraw_element(Actor* source) {
+  if (!get_element(source)) { return; }
   get_element(source)->redraw=1;
 }
 
 
 void disable_element(Actor* source) {
+  if (!get_element(source)) { return; }
   get_element(source)->enabled = 0;
   get_element(source)->redraw  = 1;
 }
 
 
 void enable_element(Actor* source) {
+  if (!get_element(source)) { return; }
   get_element(source)->enabled = 1;
   get_element(source)->redraw  = 1;
 }
@@ -512,7 +515,7 @@ int do_create() {
 }
 
 
-void do_gui_button(GUIElement* this_e) {
+void gui_button(GUIElement* this_e) {
   const int button_height = (double)this_e->theme->button.original_height/4.0;
   const int button_width  = this_e->theme->button.original_width;
   int new_state           = this_e->set.button.state;
@@ -546,7 +549,7 @@ void do_gui_button(GUIElement* this_e) {
 }
 
 
-void do_gui_window(GUIElement* this_e) {
+void gui_window(GUIElement* this_e) {
   const int section_size   = (this_e->theme->window.original_height/3)/3;
   const int caption_width  = this_e->theme->window_captions.original_width/3;
   const int caption_height = this_e->theme->window_captions.original_height/3;
@@ -693,7 +696,7 @@ void do_gui_window(GUIElement* this_e) {
 }
 
 
-void do_gui_label(GUIElement* this_e) {
+void gui_label(GUIElement* this_e) {
   if (transp == 1) return;
 
   if(strcmp(text, this_e->set.label.text)) {
@@ -709,13 +712,11 @@ void do_gui_label(GUIElement* this_e) {
 }
 
 
-void do_gui_meter(GUIElement* this_e) {
+void gui_meter(GUIElement* this_e) {
   const double b_width = width - this_e->theme->meter_offset*2;
   const int bar_length = (int)(b_width*((double)this_e->set.meter.value/(double)this_e->set.meter.max));
   const Image* cur     = &this_e->theme->meter;
   Image first_layer, second_layer;
-  image_subimage(*cur, &first_layer,  0,cur->original_height/2, cur->original_width,cur->original_height/2);
-  image_subimage(*cur, &second_layer, 0,0, cur->original_width,cur->original_height/2);
 
   if (transp == 1) return;
 
@@ -728,6 +729,8 @@ void do_gui_meter(GUIElement* this_e) {
   }
 
   if(!this_e->redraw) return;
+  image_subimage(*cur, &first_layer,  0,cur->original_height/2, cur->original_width,cur->original_height/2);
+  image_subimage(*cur, &second_layer, 0,0, cur->original_width,cur->original_height/2);
   erase(0,0,0,1);
   image_setrgb(&second_layer, this_e->r, this_e->g, this_e->b);
   image_draw_3x3(first_layer);
@@ -739,16 +742,13 @@ void do_gui_meter(GUIElement* this_e) {
 }
 
 
-void do_gui_slider(GUIElement* this_e) {
+void gui_slider(GUIElement* this_e) {
   const double b_width = width - this_e->theme->slider_offset*2;
   double b_percent;
   int bar_length, handle_pos;
   char label_text[32];
   const Image* cur = &this_e->theme->slider;
   Image first_layer, second_layer, handle;
-  image_subimage(*cur, &first_layer,  0,0,cur->original_width,cur->original_height/3);
-  image_subimage(*cur, &second_layer, 0,cur->original_height/3, cur->original_width,cur->original_height/3);
-  image_subimage(*cur, &handle,       0,cur->original_height/3*2, cur->original_width,cur->original_height/3);
 
   if (transp == 1) return;
 
@@ -775,13 +775,16 @@ void do_gui_slider(GUIElement* this_e) {
   }
 
   if(!this_e->redraw) return;
+  image_subimage(*cur, &first_layer,  0,0,cur->original_width,cur->original_height/3);
+  image_subimage(*cur, &second_layer, 0,cur->original_height/3, cur->original_width,cur->original_height/3);
+  image_subimage(*cur, &handle,       0,cur->original_height/3*2, cur->original_width,cur->original_height/3);
   erase(0,0,0,1);
   image_setrgb(&second_layer, this_e->r, this_e->g, this_e->b);
   image_draw_3x3(first_layer);
   if(bar_length > 0) image_draw_3x3s(second_layer, this_e->theme->slider_offset,0, bar_length, height);
 
   handle_pos = (b_percent * (double)(b_width - this_e->theme->slider_handle_width)) + this_e->theme->slider_offset;
-  image_draw_3x3s(handle, handle_pos - handle.original_width/2 + this_e->theme->slider_handle_width/2,0, handle.original_width, height);
+  image_draw_3x3s(handle, handle_pos,0, handle.original_width, height);
 
   if (this_e->set.slider.show_value) {
     sprintf(label_text, "%d", this_e->set.slider.value);
@@ -791,6 +794,41 @@ void do_gui_slider(GUIElement* this_e) {
                    (this_e->set.slider.value - this_e->set.slider.min) > (this_e->set.slider.max-this_e->set.slider.min)/2 ? 'l' : 'r');
   }
   this_e->redraw = 0;
+}
+
+void gui_textbox(GUIElement* this_e) {
+  const Image* cur        = &this_e->theme->textbox;
+  const int    x_padding  = cur->original_width/3;
+  int          car_pos    = this_e->theme->font.char_width*this_e->set.textbox.caret_pos + x_padding;
+  Image base, caret;
+
+  if (transp == 1) { return; }
+  if (car_pos + this_e->set.textbox.shift  > width - x_padding && width - car_pos - x_padding < this_e->set.textbox.shift) {
+    this_e->set.textbox.shift = (width - car_pos) - x_padding;
+  }
+  else if (car_pos + this_e->set.textbox.shift < x_padding) {
+    this_e->set.textbox.shift = (0 - car_pos) + x_padding;
+  }
+
+  if (this_e->focus) {
+    this_e->set.textbox.caret_timer += 1;
+    if (this_e->set.textbox.caret_timer == this_e->set.textbox.caret_blink_speed)   { this_e->redraw = 1; }
+    if (this_e->set.textbox.caret_timer == this_e->set.textbox.caret_blink_speed*2) {
+      this_e->redraw = 1;
+      this_e->set.textbox.caret_timer = 0;
+    }
+  }
+
+  if(!this_e->redraw) return;
+  image_subimage(*cur, &base,  0,cur->original_height/3*this_e->focus,cur->original_width,cur->original_height/3);
+  image_subimage(*cur, &caret, 0,cur->original_height/3*2, cur->original_width, cur->original_height/3);
+  erase(0,0,0,1);
+  image_draw_3x3(base);
+  text_draw_offset(this_e->theme->font, this_e->set.textbox.text,
+                   x_padding + this_e->set.textbox.shift, height/2 - this_e->theme->font.height/2);
+  if (this_e->focus && this_e->set.textbox.caret_timer < this_e->set.textbox.caret_blink_speed) {
+    image_draw(caret, car_pos + this_e->set.textbox.shift, height/2 - caret.original_height/2);
+  }
 }
 
 //  ___       ___        ___      ___                          __   ___  __
@@ -865,6 +903,13 @@ void do_gui(char type[]) {
       new_element.set.slider.show_value = 1;
       sscanf(buffers[1], "%i,%i,%i", &new_element.set.slider.min, &new_element.set.slider.value, &new_element.set.slider.max);
     }
+    else if (!strcmp(buffers[0], "textbox")) {
+      new_element.type = GUI_TEXTBOX;
+      new_element.set.textbox.max_size = 128;
+      new_element.set.textbox.last_max = new_element.set.textbox.max_size;
+      new_element.set.textbox.caret_blink_speed = GAME_FPS/3;
+      new_element.set.textbox.text     = malloc(sizeof(char)*new_element.set.textbox.max_size);
+    }
 
     GUIData.elements = realloc(GUIData.elements, sizeof(GUIElement)*GUIData.num_elements);
     GUIData.elements[GUIData.num_elements-1] = new_element;
@@ -878,13 +923,14 @@ void do_gui(char type[]) {
       break;
 
     case GUI_OBJECT: break;
-    case GUI_BUTTON: do_gui_button(this_e); break;
-    case GUI_WINDOW: do_gui_window(this_e); break;
-    case GUI_LABEL:  do_gui_label(this_e);  break;
-    case GUI_METER:  do_gui_meter(this_e);  break;
-    case GUI_SLIDER: do_gui_slider(this_e); break;
+    case GUI_BUTTON:  gui_button(this_e);  break;
+    case GUI_WINDOW:  gui_window(this_e);  break;
+    case GUI_LABEL:   gui_label(this_e);   break;
+    case GUI_METER:   gui_meter(this_e);   break;
+    case GUI_SLIDER:  gui_slider(this_e);  break;
+    case GUI_TEXTBOX: gui_textbox(this_e); break;
 
-    case GUI_MENU:
+    case GUI_MENU: {
       if(this_e->set.menu.active) { transp=0; }
       else { transp=1; }
 
@@ -892,12 +938,11 @@ void do_gui(char type[]) {
       erase(0,0,0,1);
       image_draw_3x3(this_e->theme->menu);
       this_e->redraw=0;
-      break;
+    } break;
   }
 }
 
 void gui_mousedown() {
-  int new_state;
   GUIElement* this_e = this_element();
   int i;
   for(i=0; i<GUIData.num_elements; i++) {
@@ -906,34 +951,18 @@ void gui_mousedown() {
   this_e->focus = 1;
 
   switch(this_e->type) {
-    case GUI_BUTTON:
-    {
+    case GUI_BUTTON: {
       if(!this_e->enabled) break;
       this_e->set.button.state=2;
       this_e->redraw=1;
-      break;
-    }
+    } break;
 
-    case GUI_SLIDER:
-    {
-      // I think the expected use of sliders is that the handle should move to wherever
-      // you've clicked, rather than just moving the handle.
-      // Leaving this code in, in case I end up considering it as an option.
-
-      // double b_width       = width - this_e->theme->slider_offset*2;
-      // int handle_width     = this_e->theme->slider.original_width;
-      // int h_handle_width   = ceil ((double)this_e->theme->slider_handle_width / 2.0);
-      // int bar_length       = b_width * ((double)(this_e->set.slider.value-this_e->set.slider.min)/(double)(this_e->set.slider.max-this_e->set.slider.min));
-      // int handle_position  = bar_length + this_e->theme->slider_offset;
-
-      // if (hotspot(handle_position - h_handle_width,0, handle_position + h_handle_width,height)) {
+    case GUI_SLIDER: {
       this_e->set.slider.state = 1;
       this_e->redraw=1;
-      // }
-    }
+    } break;
 
-    case GUI_WINDOW:
-    {
+    case GUI_WINDOW: {
       const int caption_width  = this_e->theme->window_captions.original_width/3;
       const int caption_height = this_e->theme->window_captions.original_height/3;
       // Edge resizing
@@ -984,8 +1013,7 @@ void gui_mousedown() {
         this_e->set.window.offset.y = ymouse-yscreen;
         this_e->redraw=1;
       }
-      break;
-    }
+    } break;
   }
 }
 
@@ -993,18 +1021,18 @@ void gui_mousedown() {
 void gui_mouseup() {
   GUIElement* this_e = this_element();
   switch(this_e->type) {
-    case GUI_BUTTON:
+    case GUI_BUTTON: {
       this_e->set.button.state=0;
       this_e->redraw=1;
-      break;
+    } break;
 
-    case GUI_SLIDER:
+    case GUI_SLIDER: {
       this_e->set.slider.state=0;
       this_e->redraw=1;
-      break;
+    } break;
 
-    case GUI_WINDOW:
-    { const int caption_width  = this_e->theme->window_captions.original_width/3;
+    case GUI_WINDOW: {
+      const int caption_width  = this_e->theme->window_captions.original_width/3;
       const int caption_height = this_e->theme->window_captions.original_height/3;
       if(this_e->set.window.closable && hotspot(width-caption_width,0, width,caption_height)) {
         this_e->enabled = 0;
@@ -1023,7 +1051,94 @@ void gui_mouseup() {
       this_e->set.window.fold_state = 0;
       this_e->set.window.state=0;
       this_e->redraw=1;
-      break;
-    }
+    } break;
+  }
+}
+
+void gui_keydown() {
+  GUIElement* this_e = this_element();
+  switch(this_e->type) {
+    case GUI_TEXTBOX: {
+      #define VIS_KEYS 48
+      char* key      = GetKeyState();
+      int   last_key = getLastKey();
+      char* dest     = this_e->set.textbox.text;
+      int   pos, is_visible=0;
+
+      // Store a key -> result dictionary for any keys that produce visible
+      // letters or symbols.
+      char visible_keys[VIS_KEYS] = {
+        KEY_a, KEY_b, KEY_c, KEY_d, KEY_e, KEY_f, KEY_g, KEY_h, KEY_i, KEY_j, KEY_k, KEY_l,
+        KEY_m, KEY_n, KEY_o, KEY_p, KEY_q, KEY_r, KEY_s, KEY_t, KEY_u, KEY_v, KEY_w, KEY_x,
+        KEY_y, KEY_z, KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9, KEY_0,
+        KEY_BACKQUOTE, KEY_MINUS, KEY_EQUALS, KEY_LEFTBRACKET, KEY_RIGHTBRACKET, KEY_BACKSLASH,
+        KEY_SEMICOLON, KEY_QUOTE, KEY_COMMA,  KEY_PERIOD,      KEY_SLASH,        KEY_SPACE
+      };
+      char keys_lowercase[VIS_KEYS] = {
+        'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l',
+        'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x',
+        'y', 'z', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0',
+        '`', '-', '=', '[', ']','\\',
+        ';','\'', ',', '.', '/', ' '
+      };
+      char keys_uppercase[VIS_KEYS] = {
+        'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L',
+        'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
+        'Y', 'Z', '!', '@', '#', '$', '%', '^', '&', '*', '(', ')',
+        '~', '_', '+', '{', '}', '|',
+        ':', '"', '<', '>', '?', ' '
+      };
+
+      if (!this_e->focus) { break; }
+
+      // This resets the caret blink timer while typing, so that the caret
+      // doesn't go away as long as you're still pressing keys.
+      this_e->set.textbox.caret_timer = 0;
+
+      // Any halting command characters
+      if (last_key == KEY_LEFT) {
+        this_e->set.textbox.caret_pos = max(this_e->set.textbox.caret_pos-1, 0); break;
+      }
+      if (last_key == KEY_RIGHT) {
+        this_e->set.textbox.caret_pos = min(this_e->set.textbox.caret_pos+1, strlen(this_e->set.textbox.text)); break;
+      }
+      if (last_key == KEY_END) {
+        this_e->set.textbox.caret_pos = strlen(this_e->set.textbox.text); break;
+      }
+      if (last_key == KEY_HOME) {
+        this_e->set.textbox.caret_pos = 0; break;
+      }
+      if (last_key == KEY_BACKSPACE) {
+        if (strlen(dest) == 0) { break; }
+        chrremove(dest, this_e->set.textbox.caret_pos-1);
+        this_e->set.textbox.caret_pos--; break;
+      }
+      if (last_key == KEY_CLEAR) {
+        chrremove(dest, this_e->set.textbox.caret_pos); break;
+      }
+      if (last_key == KEY_RETURN) {
+        this_e->focus = 0; break;
+      }
+
+      // Modifier keys
+      if (key[KEY_LCTRL] || key[KEY_RCTRL]) {
+        // Check for control commands
+        break;
+      }
+
+      for (pos=0; pos<VIS_KEYS; pos++) {
+        if (visible_keys[pos] == last_key) { is_visible = 1; break; }
+      }
+
+      if (is_visible) {
+        char* dict;
+        if   (key[KEY_LSHIFT] || key[KEY_RSHIFT]) { dict = keys_uppercase; }
+        else dict = keys_lowercase;
+
+        chrinsert(dest, this_e->set.textbox.caret_pos, dict[pos]);
+        this_e->set.textbox.caret_pos++;
+      }
+
+    } break;
   }
 }

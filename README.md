@@ -22,7 +22,7 @@ Not too much yet, honestly. The project is just starting up. The gist of it is t
 
 ### What's the plan?
 Quite a bit more. There's no solid end-goal for this library, merely to add as much as I can think of to it.
-- Implement more GUI elements (Sliders, textboxes, counters, toggles).
+- Implement more GUI elements (textboxes, counters, toggles).
 - Add the ability to load more different image types.
 - Implement transparency on pixels.
 - Create a text file loading / manipulation system. (Possibly _.ini_ loading as well?)
