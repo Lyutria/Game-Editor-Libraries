@@ -369,6 +369,7 @@ void image_erase(int r, int g, int b, double t) {
       erase(0,0,0,debugger.bg_transparency);
 
       for(i=0; i<DEBUG_STACK_SIZE; i++) {
+        if (strlen(debugger.stack[i].text) == 0) { continue; }
         sprintf(message, "%s [%s]: %s", debugger.stack[i].prompt,
                                         debugger.stack[i].source ? debugger.stack[i].source->name : "",
                                         debugger.stack[i].text);

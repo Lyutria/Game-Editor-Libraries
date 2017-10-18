@@ -1,4 +1,0 @@
-This is a test .txt file.
-This is a text test.
-[ Alignment ]
-  [_______]

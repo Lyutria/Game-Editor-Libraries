@@ -123,14 +123,18 @@ typedef struct gui_element {
     } counter;
 
 
-    struct textbox { // Fully usuable text box
+    struct textbox { // A single-line textbox
       char* text;
       int   max_size;
       int   last_max;
       int   shift;
-      int   caret_pos; // Stores cursor/caret position
-      short int caret_blink_speed; // Manages caret blinking speed
-      short int caret_timer;
+      int  select_start;
+      char  state;
+      struct {
+        int pos;
+        short int speed;
+        short int timer;
+      } caret;
       char limit_input; // if active, only allow characters from allowed_symbols
       char allowed_symbols[256];
     } textbox;
@@ -162,7 +166,7 @@ typedef struct gui_element {
       char fold; // If window should be folded.
       char foldable;
       char closable;
-      char resizable; // default is 0, 1 is true.
+      char resizable;
       char fold_state;
       char close_state;
       struct {
@@ -799,10 +803,18 @@ void gui_slider(GUIElement* this_e) {
 void gui_textbox(GUIElement* this_e) {
   const Image* cur        = &this_e->theme->textbox;
   const int    x_padding  = cur->original_width/3;
-  int          car_pos    = this_e->theme->font.char_width*this_e->set.textbox.caret_pos + x_padding;
-  Image base, caret;
+  int          car_pos    = this_e->theme->font.char_width*this_e->set.textbox.caret.pos + x_padding;
+  int          select_init, select_size;
+  Image base, caret, select;
 
   if (transp == 1) { return; }
+
+  if (this_e->set.textbox.state == 1)  { // dragging
+    this_e->set.textbox.caret.pos = ((this_e->set.textbox.shift*-1) + xmouse - this_e->theme->font.char_width/2 - x_padding) / this_e->theme->font.char_width, strlen(this_e->set.textbox.text);
+    if (this_e->set.textbox.caret.pos < 0) { this_e->set.textbox.caret.pos = 0; }
+    if (this_e->set.textbox.caret.pos > strlen(this_e->set.textbox.text)) { this_e->set.textbox.caret.pos = strlen(this_e->set.textbox.text); }
+  }
+
   if (car_pos + this_e->set.textbox.shift  > width - x_padding && width - car_pos - x_padding < this_e->set.textbox.shift) {
     this_e->set.textbox.shift = (width - car_pos) - x_padding;
   }
@@ -811,22 +823,32 @@ void gui_textbox(GUIElement* this_e) {
   }
 
   if (this_e->focus) {
-    this_e->set.textbox.caret_timer += 1;
-    if (this_e->set.textbox.caret_timer == this_e->set.textbox.caret_blink_speed)   { this_e->redraw = 1; }
-    if (this_e->set.textbox.caret_timer == this_e->set.textbox.caret_blink_speed*2) {
+    this_e->set.textbox.caret.timer += 1;
+    if (this_e->set.textbox.caret.timer == this_e->set.textbox.caret.speed)   { this_e->redraw = 1; }
+    if (this_e->set.textbox.caret.timer == this_e->set.textbox.caret.speed*2) {
       this_e->redraw = 1;
-      this_e->set.textbox.caret_timer = 0;
+      this_e->set.textbox.caret.timer = 0;
     }
   }
 
+  select_init = min(this_e->set.textbox.select_start, this_e->set.textbox.caret.pos);
+  select_size = max(this_e->set.textbox.select_start, this_e->set.textbox.caret.pos) - select_init;
+
   if(!this_e->redraw) return;
-  image_subimage(*cur, &base,  0,cur->original_height/3*this_e->focus,cur->original_width,cur->original_height/3);
-  image_subimage(*cur, &caret, 0,cur->original_height/3*2, cur->original_width, cur->original_height/3);
+  image_subimage(*cur, &base,  0,cur->original_height/4*this_e->focus,cur->original_width,cur->original_height/4);
+  image_subimage(*cur, &caret, 0,cur->original_height/4*2, cur->original_width, cur->original_height/4);
+  image_subimage(*cur, &select,0,cur->original_height/4*3, cur->original_width, cur->original_height/4);
   erase(0,0,0,1);
   image_draw_3x3(base);
+  if (this_e->set.textbox.select_start != -1 && this_e->set.textbox.caret.pos - this_e->set.textbox.select_start != 0) {
+    image_draw_3x3s(select, ((select_init+1)*this_e->theme->font.char_width) + this_e->set.textbox.shift - 2,
+                    height/2 - this_e->theme->font.char_height/2,
+                    select_size*this_e->theme->font.char_width + 2,
+                    this_e->theme->font.char_height);
+  }
   text_draw_offset(this_e->theme->font, this_e->set.textbox.text,
-                   x_padding + this_e->set.textbox.shift, height/2 - this_e->theme->font.height/2);
-  if (this_e->focus && this_e->set.textbox.caret_timer < this_e->set.textbox.caret_blink_speed) {
+    x_padding + this_e->set.textbox.shift, height/2 - this_e->theme->font.height/2);
+  if (this_e->focus && this_e->set.textbox.caret.timer < this_e->set.textbox.caret.speed) {
     image_draw(caret, car_pos + this_e->set.textbox.shift, height/2 - caret.original_height/2);
   }
 }
@@ -899,15 +921,16 @@ void do_gui(char type[]) {
     else if (!strcmp(buffers[0], "slider")) {
       new_element.type = GUI_SLIDER;
       new_element.set.slider.last_value = -1;
-      new_element.set.slider.state = 0;
+      new_element.set.slider.state      = 0;
       new_element.set.slider.show_value = 1;
       sscanf(buffers[1], "%i,%i,%i", &new_element.set.slider.min, &new_element.set.slider.value, &new_element.set.slider.max);
     }
     else if (!strcmp(buffers[0], "textbox")) {
       new_element.type = GUI_TEXTBOX;
-      new_element.set.textbox.max_size = 128;
-      new_element.set.textbox.last_max = new_element.set.textbox.max_size;
-      new_element.set.textbox.caret_blink_speed = GAME_FPS/3;
+      new_element.set.textbox.max_size     = 128;
+      new_element.set.textbox.last_max     = new_element.set.textbox.max_size;
+      new_element.set.textbox.caret.speed  = GAME_FPS/3;
+      new_element.set.textbox.select_start = -1;
       new_element.set.textbox.text     = malloc(sizeof(char)*new_element.set.textbox.max_size);
     }
 
@@ -1014,6 +1037,14 @@ void gui_mousedown() {
         this_e->redraw=1;
       }
     } break;
+
+    case GUI_TEXTBOX: {
+      int new_pos;
+      const int    x_padding  = this_e->theme->textbox.original_width/3;
+      this_e->set.textbox.caret.pos = min(((this_e->set.textbox.shift*-1) + xmouse - this_e->theme->font.char_width/2 - x_padding) / this_e->theme->font.char_width, strlen(this_e->set.textbox.text));
+      this_e->set.textbox.select_start = this_e->set.textbox.caret.pos;
+      this_e->set.textbox.state = 1;
+    } break;
   }
 }
 
@@ -1052,6 +1083,13 @@ void gui_mouseup() {
       this_e->set.window.state=0;
       this_e->redraw=1;
     } break;
+
+    case GUI_TEXTBOX: {
+      if (this_e->set.textbox.select_start == this_e->set.textbox.caret.pos) {
+        this_e->set.textbox.select_start = -1;
+      }
+      this_e->set.textbox.state = 0;
+    } break;
   }
 }
 
@@ -1059,7 +1097,11 @@ void gui_keydown() {
   GUIElement* this_e = this_element();
   switch(this_e->type) {
     case GUI_TEXTBOX: {
-      #define VIS_KEYS 48
+      // This is used because Game-Editor uses ANSI C, so we can't
+      // even use a const int to declare array size, but I'd like
+      // to be able to make sure all the arrays are allocated to the
+      // same size.
+      #define VIS_KEYS 64
       char* key      = GetKeyState();
       int   last_key = getLastKey();
       char* dest     = this_e->set.textbox.text;
@@ -1072,57 +1114,115 @@ void gui_keydown() {
         KEY_m, KEY_n, KEY_o, KEY_p, KEY_q, KEY_r, KEY_s, KEY_t, KEY_u, KEY_v, KEY_w, KEY_x,
         KEY_y, KEY_z, KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9, KEY_0,
         KEY_BACKQUOTE, KEY_MINUS, KEY_EQUALS, KEY_LEFTBRACKET, KEY_RIGHTBRACKET, KEY_BACKSLASH,
-        KEY_SEMICOLON, KEY_QUOTE, KEY_COMMA,  KEY_PERIOD,      KEY_SLASH,        KEY_SPACE
+        KEY_SEMICOLON, KEY_QUOTE, KEY_COMMA,  KEY_PERIOD,      KEY_SLASH,        KEY_SPACE,
+        KEY_PAD_0, KEY_PAD_1, KEY_PAD_2, KEY_PAD_3, KEY_PAD_4, KEY_PAD_5, KEY_PAD_6, KEY_PAD_7,
+        KEY_PAD_8, KEY_PAD_9, KEY_PAD_PERIOD, KEY_PAD_DIVIDE, KEY_PAD_MULTIPLY, KEY_PAD_MINUS,
+        KEY_PAD_PLUS, KEY_PAD_EQUALS
       };
       char keys_lowercase[VIS_KEYS] = {
         'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l',
         'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x',
         'y', 'z', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0',
         '`', '-', '=', '[', ']','\\',
-        ';','\'', ',', '.', '/', ' '
+        ';','\'', ',', '.', '/', ' ',
+        '0', '1', '2', '3', '4', '5', '6', '7',
+        '8', '9', '.', '/', '*', '-',
+        '+', '='
+
       };
       char keys_uppercase[VIS_KEYS] = {
         'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L',
         'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
         'Y', 'Z', '!', '@', '#', '$', '%', '^', '&', '*', '(', ')',
         '~', '_', '+', '{', '}', '|',
-        ':', '"', '<', '>', '?', ' '
+        ':', '"', '<', '>', '?', ' ',
+        '0', '1', '2', '3', '4', '5', '6', '7',
+        '8', '9', '.', '/', '*', '-',
+        '+', '='
       };
 
       if (!this_e->focus) { break; }
 
       // This resets the caret blink timer while typing, so that the caret
       // doesn't go away as long as you're still pressing keys.
-      this_e->set.textbox.caret_timer = 0;
+      this_e->set.textbox.caret.timer = 0;
 
       // Any halting command characters
+      // The main reason these are in IF statements instead of
+      // a switch case is that we want to be able to break out of
+      // the overarching switch case early.
       if (last_key == KEY_LEFT) {
-        this_e->set.textbox.caret_pos = max(this_e->set.textbox.caret_pos-1, 0); break;
+        if      (!key[KEY_LSHIFT] && !key[KEY_RSHIFT])    { this_e->set.textbox.select_start = -1; }
+        else if (this_e->set.textbox.select_start == -1) { this_e->set.textbox.select_start = this_e->set.textbox.caret.pos; }
+        this_e->set.textbox.caret.pos = max(this_e->set.textbox.caret.pos-1, 0);
+        break;
       }
       if (last_key == KEY_RIGHT) {
-        this_e->set.textbox.caret_pos = min(this_e->set.textbox.caret_pos+1, strlen(this_e->set.textbox.text)); break;
+        if      (!key[KEY_LSHIFT] && !key[KEY_RSHIFT])    { this_e->set.textbox.select_start = -1; }
+        else if (this_e->set.textbox.select_start == -1) { this_e->set.textbox.select_start = this_e->set.textbox.caret.pos; }
+        this_e->set.textbox.caret.pos = min(this_e->set.textbox.caret.pos+1, strlen(this_e->set.textbox.text));
+        break;
       }
       if (last_key == KEY_END) {
-        this_e->set.textbox.caret_pos = strlen(this_e->set.textbox.text); break;
+        if      (!key[KEY_LSHIFT] && !key[KEY_RSHIFT])    { this_e->set.textbox.select_start = -1; }
+        else if (this_e->set.textbox.select_start == -1) { this_e->set.textbox.select_start = this_e->set.textbox.caret.pos; }
+        this_e->set.textbox.caret.pos = strlen(this_e->set.textbox.text);
+        break;
       }
       if (last_key == KEY_HOME) {
-        this_e->set.textbox.caret_pos = 0; break;
+        if      (!key[KEY_LSHIFT] && !key[KEY_RSHIFT])    { this_e->set.textbox.select_start = -1; }
+        else if (this_e->set.textbox.select_start == -1) { this_e->set.textbox.select_start = this_e->set.textbox.caret.pos; }
+        this_e->set.textbox.caret.pos = 0;
+        break;
       }
       if (last_key == KEY_BACKSPACE) {
         if (strlen(dest) == 0) { break; }
-        chrremove(dest, this_e->set.textbox.caret_pos-1);
-        this_e->set.textbox.caret_pos--; break;
+
+        if (this_e->set.textbox.select_start != -1) {
+          int init, len, i;
+          init = min(this_e->set.textbox.caret.pos, this_e->set.textbox.select_start);
+          len  = max(this_e->set.textbox.caret.pos, this_e->set.textbox.select_start) - init;
+
+          for (i=init; i<strlen(this_e->set.textbox.text); i++) {
+            char res;
+            if (i + len > strlen(this_e->set.textbox.text)) { res = '\0'; }
+            else { res = this_e->set.textbox.text[i + len]; }
+            this_e->set.textbox.text[i] = this_e->set.textbox.text[i + len];
+          }
+
+          this_e->set.textbox.caret.pos    = init;
+          this_e->set.textbox.select_start = -1;
+          break;
+        }
+        else {
+          if (this_e->set.textbox.caret.pos == 0) { break; }
+          chrremove(dest, this_e->set.textbox.caret.pos-1);
+          this_e->set.textbox.caret.pos--;
+        }
+
+        if (this_e->set.textbox.shift < 0) {
+          this_e->set.textbox.shift += this_e->theme->font.char_width;
+          this_e->set.textbox.shift  = min(this_e->set.textbox.shift, 0);
+        }
+        break;
       }
       if (last_key == KEY_CLEAR) {
-        chrremove(dest, this_e->set.textbox.caret_pos); break;
+        this_e->set.textbox.caret.pos = 0;
+        strcpy(this_e->set.textbox.text, "");
       }
-      if (last_key == KEY_RETURN) {
+      if (last_key == KEY_RETURN ||
+          last_key == KEY_PAD_ENTER ||
+          last_key == KEY_ESCAPE ) {
+        this_e->set.textbox.select_start = -1;
         this_e->focus = 0; break;
       }
 
       // Modifier keys
       if (key[KEY_LCTRL] || key[KEY_RCTRL]) {
-        // Check for control commands
+        if (last_key == KEY_a) {
+          this_e->set.textbox.select_start = 0;
+          this_e->set.textbox.caret.pos    = strlen(this_e->set.textbox.text);
+        }
         break;
       }
 
@@ -1135,10 +1235,27 @@ void gui_keydown() {
         if   (key[KEY_LSHIFT] || key[KEY_RSHIFT]) { dict = keys_uppercase; }
         else dict = keys_lowercase;
 
-        chrinsert(dest, this_e->set.textbox.caret_pos, dict[pos]);
-        this_e->set.textbox.caret_pos++;
+        if (this_e->set.textbox.select_start != -1) {
+          int init, len, i;
+          init = min(this_e->set.textbox.caret.pos, this_e->set.textbox.select_start);
+          len  = max(this_e->set.textbox.caret.pos, this_e->set.textbox.select_start) - init;
+
+          for (i=init; i<strlen(this_e->set.textbox.text); i++) {
+            char res;
+            if (i + len > strlen(this_e->set.textbox.text)) { res = '\0'; }
+            else { res = this_e->set.textbox.text[i + len]; }
+            this_e->set.textbox.text[i] = this_e->set.textbox.text[i + len];
+          }
+
+          this_e->set.textbox.caret.pos    = init;
+          this_e->set.textbox.select_start = -1;
+        }
+
+        chrinsert(dest, this_e->set.textbox.caret.pos, dict[pos]);
+        this_e->set.textbox.caret.pos++;
       }
 
+      #undef VIS_KEYS
     } break;
   }
 }
