@@ -292,12 +292,13 @@ int text_draw_offset(Image cfont, char* str, int x_offset, int y_offset) {
         if (str[i] == '-' || str[i] == '+') {
           y_move = ctoi(str[i+1]);
           if (str[i] == '-') { y_move *= -1; }
-          i+=2;
+          i+=1;
         }
         else {
           y_move = ctoi(str[i]);
-          i+=1;
         }
+        x_pos+=x_move;
+        y_pos+=y_move;
         break;
 
       // Modifies the next set of drawn characters to the color set in text.

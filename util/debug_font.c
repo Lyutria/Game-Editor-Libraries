@@ -8,12 +8,18 @@ Image image_gen_debug_font() {
   gi.width = 1338; gi.original_width = gi.width;
   gi.height = 13; gi.original_height = gi.height;
   gi.angle=0;
-  gi.scale=0;
+  gi.scale=1;
+  gi.r=255;
+  gi.g=255;
+  gi.b=255;
   gi.transparent.r=0;
   gi.transparent.g=0;
+  gi.font = 1;
   gi.transparent.b=0;
   gi.characters=223;
   gi.first_character=' ';
+  gi.char_width = gi.width / gi.characters;
+  gi.char_height = gi.height;
   gi.data = (struct Pixel**)malloc(gi.width * sizeof(struct Pixel*));
   for (i=0; i<gi.width; i++) {
     gi.data[i] = (struct Pixel*)malloc(gi.height * sizeof(struct Pixel));

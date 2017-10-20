@@ -545,9 +545,9 @@ void gui_button(GUIElement* this_e) {
   image_setrgb(&current_button, this_e->r, this_e->g, this_e->b);
   erase(0,0,0,1);
   image_draw_3x3(current_button);
-  text_draw_offset(*this_e->font, this_e->set.button.text,
-                    (width/2) - ((strlens(this_e->set.button.text)*(this_e->font->char_width))/2) + this_e->theme->text_offset.x,
-                    (height/2)- ((this_e->font->height)/2) + this_e->theme->text_offset.y);
+  text_draw_offset(this_e->theme->font, this_e->set.button.text,
+                    (width/2) - ((strlens(this_e->set.button.text)*(this_e->theme->font.char_width))/2) + this_e->theme->text_offset.x,
+                    (height/2)- ((this_e->theme->font.height)/2) + this_e->theme->text_offset.y);
 
   this_e->redraw = 0;
 }
@@ -803,6 +803,7 @@ void gui_slider(GUIElement* this_e) {
 void gui_textbox(GUIElement* this_e) {
   const Image* cur        = &this_e->theme->textbox;
   const int    x_padding  = cur->original_width/3;
+  const int    x_mouse    = min(max(xmouse - xscreen, 0), width);
   int          car_pos    = this_e->theme->font.char_width*this_e->set.textbox.caret.pos + x_padding;
   int          select_init, select_size;
   Image base, caret, select;
@@ -810,7 +811,8 @@ void gui_textbox(GUIElement* this_e) {
   if (transp == 1) { return; }
 
   if (this_e->set.textbox.state == 1)  { // dragging
-    this_e->set.textbox.caret.pos = ((this_e->set.textbox.shift*-1) + xmouse - this_e->theme->font.char_width/2 - x_padding) / this_e->theme->font.char_width, strlen(this_e->set.textbox.text);
+    this_e->set.textbox.caret.pos = min(strlen(this_e->set.textbox.text) * this_e->theme->font.char_width,
+                                       ((float)(this_e->set.textbox.shift*-1) + x_mouse - x_padding + this_e->theme->font.char_width/2 ) / (float)this_e->theme->font.char_width);
     if (this_e->set.textbox.caret.pos < 0) { this_e->set.textbox.caret.pos = 0; }
     if (this_e->set.textbox.caret.pos > strlen(this_e->set.textbox.text)) { this_e->set.textbox.caret.pos = strlen(this_e->set.textbox.text); }
   }
@@ -830,6 +832,9 @@ void gui_textbox(GUIElement* this_e) {
       this_e->set.textbox.caret.timer = 0;
     }
   }
+  else { this_e->set.textbox.select_start = -1; }
+
+  if (this_e->set.textbox.caret.pos > strlen(this_e->set.textbox.text)) { this_e->set.textbox.caret.pos = strlen(this_e->set.textbox.text); }
 
   select_init = min(this_e->set.textbox.select_start, this_e->set.textbox.caret.pos);
   select_size = max(this_e->set.textbox.select_start, this_e->set.textbox.caret.pos) - select_init;
@@ -869,7 +874,6 @@ void do_gui(char type[]) {
     GUI_ID                    = GUIData.num_elements;
     new_element.redraw        = 1;
     new_element.theme         = &GUIData.theme;
-    new_element.font          = &GUIData.theme.font;
     new_element.r             = 255;
     new_element.g             = 255;
     new_element.b             = 255;
@@ -1040,8 +1044,10 @@ void gui_mousedown() {
 
     case GUI_TEXTBOX: {
       int new_pos;
-      const int    x_padding  = this_e->theme->textbox.original_width/3;
-      this_e->set.textbox.caret.pos = min(((this_e->set.textbox.shift*-1) + xmouse - this_e->theme->font.char_width/2 - x_padding) / this_e->theme->font.char_width, strlen(this_e->set.textbox.text));
+      const int x_padding = this_e->theme->textbox.original_width/3;
+      const int x_mouse   = min(max(xmouse - xscreen, 0), width);
+      this_e->set.textbox.caret.pos = ((float)(this_e->set.textbox.shift*-1) + x_mouse - x_padding + this_e->theme->font.char_width/2 ) / (float)this_e->theme->font.char_width;
+      this_e->set.textbox.caret.pos = min(max(this_e->set.textbox.caret.pos, 0), strlen(this_e->set.textbox.text));
       this_e->set.textbox.select_start = this_e->set.textbox.caret.pos;
       this_e->set.textbox.state = 1;
     } break;
@@ -1157,24 +1163,28 @@ void gui_keydown() {
         this_e->set.textbox.caret.pos = max(this_e->set.textbox.caret.pos-1, 0);
         break;
       }
+
       if (last_key == KEY_RIGHT) {
         if      (!key[KEY_LSHIFT] && !key[KEY_RSHIFT])    { this_e->set.textbox.select_start = -1; }
         else if (this_e->set.textbox.select_start == -1) { this_e->set.textbox.select_start = this_e->set.textbox.caret.pos; }
         this_e->set.textbox.caret.pos = min(this_e->set.textbox.caret.pos+1, strlen(this_e->set.textbox.text));
         break;
       }
+
       if (last_key == KEY_END) {
         if      (!key[KEY_LSHIFT] && !key[KEY_RSHIFT])    { this_e->set.textbox.select_start = -1; }
         else if (this_e->set.textbox.select_start == -1) { this_e->set.textbox.select_start = this_e->set.textbox.caret.pos; }
         this_e->set.textbox.caret.pos = strlen(this_e->set.textbox.text);
         break;
       }
+
       if (last_key == KEY_HOME) {
         if      (!key[KEY_LSHIFT] && !key[KEY_RSHIFT])    { this_e->set.textbox.select_start = -1; }
         else if (this_e->set.textbox.select_start == -1) { this_e->set.textbox.select_start = this_e->set.textbox.caret.pos; }
         this_e->set.textbox.caret.pos = 0;
         break;
       }
+
       if (last_key == KEY_BACKSPACE) {
         if (strlen(dest) == 0) { break; }
 
@@ -1191,6 +1201,8 @@ void gui_keydown() {
           }
 
           this_e->set.textbox.caret.pos    = init;
+          this_e->set.textbox.shift       += len * this_e->theme->font.char_width;
+          if (this_e->set.textbox.shift > 0) { this_e->set.textbox.shift = 0; }
           this_e->set.textbox.select_start = -1;
           break;
         }
@@ -1198,21 +1210,22 @@ void gui_keydown() {
           if (this_e->set.textbox.caret.pos == 0) { break; }
           chrremove(dest, this_e->set.textbox.caret.pos-1);
           this_e->set.textbox.caret.pos--;
-        }
 
-        if (this_e->set.textbox.shift < 0) {
-          this_e->set.textbox.shift += this_e->theme->font.char_width;
-          this_e->set.textbox.shift  = min(this_e->set.textbox.shift, 0);
+          if (this_e->set.textbox.shift < 0) {
+            this_e->set.textbox.shift += this_e->theme->font.char_width;
+            this_e->set.textbox.shift  = min(this_e->set.textbox.shift, 0);
+          }
         }
         break;
       }
-      if (last_key == KEY_CLEAR) {
-        this_e->set.textbox.caret.pos = 0;
-        strcpy(this_e->set.textbox.text, "");
-      }
+
       if (last_key == KEY_RETURN ||
-          last_key == KEY_PAD_ENTER ||
-          last_key == KEY_ESCAPE ) {
+          last_key == KEY_PAD_ENTER) {
+        this_e->set.textbox.select_start = -1;
+        break;
+      }
+
+      if ( last_key == KEY_ESCAPE ) {
         this_e->set.textbox.select_start = -1;
         this_e->focus = 0; break;
       }
@@ -1235,6 +1248,7 @@ void gui_keydown() {
         if   (key[KEY_LSHIFT] || key[KEY_RSHIFT]) { dict = keys_uppercase; }
         else dict = keys_lowercase;
 
+
         if (this_e->set.textbox.select_start != -1) {
           int init, len, i;
           init = min(this_e->set.textbox.caret.pos, this_e->set.textbox.select_start);
@@ -1251,6 +1265,7 @@ void gui_keydown() {
           this_e->set.textbox.select_start = -1;
         }
 
+        if (strlen(this_e->set.textbox.text) > this_e->set.textbox.max_size) { break; }
         chrinsert(dest, this_e->set.textbox.caret.pos, dict[pos]);
         this_e->set.textbox.caret.pos++;
       }
