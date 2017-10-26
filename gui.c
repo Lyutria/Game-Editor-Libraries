@@ -21,7 +21,7 @@
 // and the variable isn't used for Canvas actors.
 #define GUI_ID animpos
 
-typedef enum gui_type {
+typedef enum GUIType {
   GUI_OBJECT,
   GUI_BUTTON,
   GUI_SLIDER,
@@ -40,7 +40,7 @@ typedef enum gui_type {
 // .__/  |  |  \ \__/ \__,  |  .__/
 //
 
-typedef struct gui_theme {
+typedef struct GUITheme {
   Image font;
   Image button;
   Image toggle_button;
@@ -70,7 +70,7 @@ typedef struct gui_theme {
   } text_offset;
 } GUITheme;
 
-typedef struct gui_element {
+typedef struct GUIElement {
   char owner[16]; // Owner actor name
   GUIType   type;
   GUITheme* theme;
@@ -95,27 +95,27 @@ typedef struct gui_element {
     short int d_distance;
   } bound;
 
-  union set { // A union to save memory space, since
+  union gui_properties { // A union to save memory space, since
               // There's a lot of variables.
-    struct button { // A clickable button
+    struct button_properties { // A clickable button
       char text[64]; // Text to be displayed by said button
       int state; // The state of the button (mouseover, mousedown, etc.)
     } button;
 
 
-    struct label {
+    struct label_properties {
       char text[256];
       char align;
     } label;
 
 
-    struct toggle_button { // A clickable toggle button
+    struct toggle_button_properties { // A clickable toggle button
       int* variable; // A pointer to the variable the button needs
       char text[64]; // The text to be displayed by said button
     } toggle_button;
 
 
-    struct counter { // An increment/decrement button
+    struct counter_properties { // An increment/decrement button
       char text[64];
       int* variable;
       char left_delimiter; // The text for the decrementer.
@@ -123,7 +123,7 @@ typedef struct gui_element {
     } counter;
 
 
-    struct textbox { // A single-line textbox
+    struct textbox_properties { // A single-line textbox
       char* text;
       int   max_size;
       int   last_max;
@@ -140,7 +140,7 @@ typedef struct gui_element {
     } textbox;
 
 
-    struct meter { // Displays a bar (like a progress bar)
+    struct meter_properties { // Displays a bar (like a progress bar)
       int value;
       int last_value;
       int max; // The max value for the bar/variable
@@ -148,7 +148,7 @@ typedef struct gui_element {
     } meter;
 
 
-    struct slider { // Displays as a bar with a clickable handle
+    struct slider_properties { // Displays as a bar with a clickable handle
       int value;
       int last_value;
       int min; // Minimum value for slider
@@ -159,7 +159,7 @@ typedef struct gui_element {
     } slider;
 
 
-    struct window { // A window container
+    struct window_properties { // A window container
       char text[64]; // Window Title
       char buttons[3]; // Up to 3 caption buttons in the top-right
       char text_align;
@@ -185,12 +185,12 @@ typedef struct gui_element {
     } window;
 
 
-    struct menu { // A menu container
+    struct menu_properties { // A menu container
       char active; // If menu is being shown
     } menu;
 
 
-    struct tooltip { // A tooltip, duh
+    struct tooltip_properties { // A tooltip, duh
       int delay; // Delay in frames to start fading in
       int active; // If tooltip is active
     } tooltip;
@@ -201,7 +201,6 @@ struct {
   GUIElement* elements; // Dynamic array of GUI elements, to hold them between frames.
   GUITheme    theme;    // Main theme elements default to
   int num_elements;     // Stores the current number of GUI elements
-  int mouse_state;
   char clipboard[512];  // Stores program clipboard for text elements
 } GUIData;
 
@@ -244,57 +243,57 @@ GUIElement* get_element(Actor*source) {
 
 // Bind top, bottom, left, right edges to a source actors width/height;
 void bind_this_element_to(Actor*source, char dir[]) {
-  GUIElement* this_e = this_element();
+  GUIElement* elem = this_element();
   int old_x = x, old_y = y;
   int old_width = width, old_height = height;
-  if ( this_e->bound_to != source ) { // setup
+  if ( elem->bound_to != source ) { // setup
     int i;
     ChangeParent("Event Actor", source->name);
     for(i=0; i<strlen(dir); i++) {
       switch(dir[i]) {
         case 'b':
         case 'd':
-          this_e->bound.d = 1;
-          this_e->bound.d_distance = source->height - height - y;
+          elem->bound.d = 1;
+          elem->bound.d_distance = source->height - height - y;
           break;
         case 't':
         case 'u':
-          this_e->bound.u = 1;
-          this_e->bound.u_distance = y;
+          elem->bound.u = 1;
+          elem->bound.u_distance = y;
           break;
         case 'l':
-          this_e->bound.l = 1;
-          this_e->bound.l_distance = x;
+          elem->bound.l = 1;
+          elem->bound.l_distance = x;
           break;
         case 'r':
-          this_e->bound.r_distance = source->width - width - x;
-          this_e->bound.r = 1;
+          elem->bound.r_distance = source->width - width - x;
+          elem->bound.r = 1;
           break;
         }
       }
-      this_e->bound_to = source;
+      elem->bound_to = source;
   }
 
-  if (this_e->bound.l && this_e->bound.r) {
-    x = this_e->bound.l_distance;
-    width = this_e->bound_to->width - this_e->bound.l_distance - this_e->bound.r_distance;
+  if (elem->bound.l && elem->bound.r) {
+    x = elem->bound.l_distance;
+    width = elem->bound_to->width - elem->bound.l_distance - elem->bound.r_distance;
   }
-  else if (this_e->bound.l) {
-    x = this_e->bound.l_distance;
+  else if (elem->bound.l) {
+    x = elem->bound.l_distance;
   }
-  else if (this_e->bound.r) {
-    x = this_e->bound_to->width - this_e->bound.r_distance - width;
+  else if (elem->bound.r) {
+    x = elem->bound_to->width - elem->bound.r_distance - width;
   }
 
-  if (this_e->bound.u && this_e->bound.d) {
-    y = this_e->bound.u_distance;
-    height = this_e->bound_to->height - this_e->bound.u_distance - this_e->bound.d_distance;
+  if (elem->bound.u && elem->bound.d) {
+    y = elem->bound.u_distance;
+    height = elem->bound_to->height - elem->bound.u_distance - elem->bound.d_distance;
   }
-  else if (this_e->bound.u) {
-    y = this_e->bound.u_distance;
+  else if (elem->bound.u) {
+    y = elem->bound.u_distance;
   }
-  else if (this_e->bound.d) {
-    y = this_e->bound_to->height - this_e->bound.d_distance - height;
+  else if (elem->bound.d) {
+    y = elem->bound_to->height - elem->bound.d_distance - height;
   }
 
   if(source->GUI_ID != 0) {
@@ -303,14 +302,14 @@ void bind_this_element_to(Actor*source, char dir[]) {
       else if(!get_element(source)->enabled) { transp = 1; }
       else { transp = 0; }
 
-      if(this_e->focus) {
-        get_element(this_e->bound_to)->focus = 1;
+      if(elem->focus) {
+        get_element(elem->bound_to)->focus = 1;
       }
     }
   }
 
   if(height != old_height || width != old_width || x != old_x || y != old_y) {
-    this_e->redraw =1;
+    elem->redraw =1;
   }
 }
 
@@ -360,7 +359,6 @@ void redraw_all_elements() {
 
 void init_gui() {
   GUIData.num_elements = 0;
-  GUIData.mouse_state  = 0;
   GUIData.theme.text_offset.x  = 0;
   GUIData.theme.text_offset.y  = 0;
   GUIData.elements = malloc(sizeof(GUIElement));
@@ -519,57 +517,59 @@ int do_create() {
 }
 
 
-void gui_button(GUIElement* this_e) {
-  const int button_height = (double)this_e->theme->button.original_height/4.0;
-  const int button_width  = this_e->theme->button.original_width;
-  int new_state           = this_e->set.button.state;
-  int button_mode         = this_e->set.button.state;
+void gui_button() {
+  GUIElement* elem = this_element();
+  const int button_height = (double)elem->theme->button.source_height/4.0;
+  const int button_width  = elem->theme->button.source_width;
+  int new_state           = elem->set.button.state;
+  int button_mode         = elem->set.button.state;
   Image current_button;
 
   if (transp == 1) return;
-  if (this_e->set.button.state != 2) { // mousedown
+  if (elem->set.button.state != 2) { // mousedown
     if   ( hotspot(0,0,width,height) ) { new_state = 1; } // mouseover
     else { new_state = 0; } // normal
   }
   else if(!hotspot(0,0,width,height)) { new_state = 0; }
-  if (!this_e->enabled) { new_state = 3; }
+  if (!elem->enabled) { new_state = 3; }
 
-  if (this_e->set.button.state != new_state) {
-    this_e->set.button.state = new_state;
-    this_e->redraw = 1;
+  if (elem->set.button.state != new_state) {
+    elem->set.button.state = new_state;
+    elem->redraw = 1;
   }
 
-  if (!this_e->redraw) return;
+  if (!elem->redraw) return;
   button_mode = new_state;
-  image_subimage(this_e->theme->button, &current_button, 0,button_height*(button_mode), button_width,button_height);
-  image_setrgb(&current_button, this_e->r, this_e->g, this_e->b);
+  image_subimage(elem->theme->button, &current_button, 0,button_height*(button_mode), button_width,button_height);
+  image_setrgb(&current_button, elem->r, elem->g, elem->b);
   erase(0,0,0,1);
   image_draw_3x3(current_button);
-  text_draw_offset(this_e->theme->font, this_e->set.button.text,
-                    (width/2) - ((strlens(this_e->set.button.text)*(this_e->theme->font.char_width))/2) + this_e->theme->text_offset.x,
-                    (height/2)- ((this_e->theme->font.height)/2) + this_e->theme->text_offset.y);
+  text_draw_offset(elem->theme->font, elem->set.button.text,
+                   (width/2) - ((strlens(elem->set.button.text)*(elem->theme->font.char_width))/2) + elem->theme->text_offset.x,
+                   (height/2)- ((elem->theme->font.height)/2) + elem->theme->text_offset.y);
 
-  this_e->redraw = 0;
+  elem->redraw = 0;
 }
 
 
-void gui_window(GUIElement* this_e) {
-  const int section_size   = (this_e->theme->window.original_height/3)/3;
-  const int caption_width  = this_e->theme->window_captions.original_width/3;
-  const int caption_height = this_e->theme->window_captions.original_height/3;
-  const int window_height  = this_e->theme->window.original_height/3;
-  const int window_width   = this_e->theme->window.original_width;
-  const int fold_height    = (double)this_e->theme->window_folded.original_height/3.0;
-  int fold_state           = this_e->set.window.fold_state;
-  int close_state          = this_e->set.window.close_state;
-  int new_state            = this_e->set.window.state;
+void gui_window() {
+  GUIElement* elem = this_element();
+  const int section_size   = (elem->theme->window.source_height/3)/3;
+  const int caption_width  = elem->theme->window_captions.source_width/3;
+  const int caption_height = elem->theme->window_captions.source_height/3;
+  const int window_height  = elem->theme->window.source_height/3;
+  const int window_width   = elem->theme->window.source_width;
+  const int fold_height    = (double)elem->theme->window_folded.source_height/3.0;
+  int fold_state           = elem->set.window.fold_state;
+  int close_state          = elem->set.window.close_state;
+  int new_state            = elem->set.window.state;
   Image current_window;
 
-  if(!this_e->enabled) { erase(0,0,0,1); return; }
+  if(!elem->enabled) { erase(0,0,0,1); return; }
   if (transp == 1) return;
 
   // If this window has focus, move to front
-  if (this_e->focus == 1) {
+  if (elem->focus == 1) {
     int i;
     for(i=0; i<GUIData.num_elements; i++) {
       if(GUIData.elements[i].type == GUI_WINDOW) {
@@ -578,28 +578,28 @@ void gui_window(GUIElement* this_e) {
     }
     ChangeZDepth("Event Actor", 1.0);
 
-    this_e->focus = 0;
+    elem->focus = 0;
   }
 
-  if(this_e->set.window.closable && hotspot(width-caption_width,0, width,caption_height)) {
-    if(this_e->set.window.close_state != 2) { close_state = 1; }
+  if(elem->set.window.closable && hotspot(width-caption_width,0, width,caption_height)) {
+    if(elem->set.window.close_state != 2) { close_state = 1; }
   }
   else if (close_state != 2) { close_state = 0; }
 
-  if(this_e->set.window.foldable) {
+  if(elem->set.window.foldable) {
     if (fold_state != 2) { fold_state = 0; }
-    if(this_e->set.window.closable) {
+    if(elem->set.window.closable) {
       if(hotspot(width-caption_width*2,0, width-caption_width,caption_height)) {
-        if(this_e->set.window.fold_state != 2) { fold_state = 1; }
+        if(elem->set.window.fold_state != 2) { fold_state = 1; }
       }
     }
     else if (hotspot(width-caption_width,0, width,caption_height)) {
-      if(this_e->set.window.fold_state != 2) { fold_state = 1; }
+      if(elem->set.window.fold_state != 2) { fold_state = 1; }
     }
   }
 
-  if(this_e->set.window.state != 2 && this_e->set.window.state < 4) { // dragged
-    if(hotspot(0,0,width,height) && !hotspot(3,3,width-3,height-3) && this_e->set.window.resizable) {
+  if(elem->set.window.state != 2 && elem->set.window.state < 4) { // dragged
+    if(hotspot(0,0,width,height) && !hotspot(3,3,width-3,height-3) && elem->set.window.resizable) {
       new_state = 3; // edge highlighted
     } else if(hotspot(0,0,width,section_size)) {
       new_state = 1; // mouseover
@@ -609,252 +609,256 @@ void gui_window(GUIElement* this_e) {
     }
   }
   else if (new_state == 2) { // dragging
-    xscreen = xmouse-this_e->set.window.offset.x;
-    yscreen = ymouse-this_e->set.window.offset.y;
+    xscreen = xmouse-elem->set.window.offset.x;
+    yscreen = ymouse-elem->set.window.offset.y;
   }
   else if (new_state >= 4) { // resizing
     const int x_mouse = xmouse - xscreen;
     const int y_mouse = ymouse - yscreen;
     const int state = new_state-3;
     if (state == 1 || state == 2 || state == 3) {
-      if (height-y_mouse > this_e->set.window.min.height) {
-        if (height < this_e->set.window.max.height) { y += y_mouse; }
+      if (height-y_mouse > elem->set.window.min.height) {
+        if (height < elem->set.window.max.height) { y += y_mouse; }
         height = height - y_mouse;
       }
     }
     if (state == 1 || state == 4 || state == 7) {
-      if (width-x_mouse > this_e->set.window.min.width) {
-        if (width < this_e->set.window.max.width) { x += x_mouse; }
+      if (width-x_mouse > elem->set.window.min.width) {
+        if (width < elem->set.window.max.width) { x += x_mouse; }
         width = width - x_mouse;
       }
     }
     if (state == 3 || state == 6 || state == 9) { width = x_mouse; }
     if (state == 7 || state == 8 || state == 9) { height = y_mouse; }
-    if(width > this_e->set.window.max.width)   { width  = this_e->set.window.max.width; }
-    if(height > this_e->set.window.max.height) { height = this_e->set.window.max.height; }
-    if(width < this_e->set.window.min.width)   { width  = this_e->set.window.min.width; }
-    if(height < this_e->set.window.min.height) { height = this_e->set.window.min.height; }
-    this_e->redraw = 1;
+    if(width > elem->set.window.max.width)   { width  = elem->set.window.max.width; }
+    if(height > elem->set.window.max.height) { height = elem->set.window.max.height; }
+    if(width < elem->set.window.min.width)   { width  = elem->set.window.min.width; }
+    if(height < elem->set.window.min.height) { height = elem->set.window.min.height; }
+    elem->redraw = 1;
   }
 
-  if(this_e->set.window.close_state != close_state) {
-    this_e->set.window.close_state   = close_state;
-    this_e->redraw                   = 1;
+  if(elem->set.window.close_state != close_state) {
+    elem->set.window.close_state   = close_state;
+    elem->redraw                   = 1;
   }
-  if(this_e->set.window.fold_state != fold_state) {
-    this_e->set.window.fold_state   = fold_state;
-    this_e->redraw                  = 1;
+  if(elem->set.window.fold_state != fold_state) {
+    elem->set.window.fold_state   = fold_state;
+    elem->redraw                  = 1;
   }
-  if(this_e->set.window.state != new_state) {
-    this_e->set.window.state   = new_state;
-    this_e->redraw             = 1;
+  if(elem->set.window.state != new_state) {
+    elem->set.window.state   = new_state;
+    elem->redraw             = 1;
   }
 
-  if(!this_e->redraw) return;
-  if(!this_e->set.window.fold) {
-    image_subimage(this_e->theme->window, &current_window,
-                   0,window_height*(this_e->set.window.state > 2 ? 0: this_e->set.window.state),
+  if(!elem->redraw) return;
+  if(!elem->set.window.fold) {
+    image_subimage(elem->theme->window, &current_window,
+                   0,window_height*(elem->set.window.state > 2 ? 0: elem->set.window.state),
                    window_width,window_height);
-    image_setrgb(&current_window, this_e->r, this_e->g, this_e->b);
+    image_setrgb(&current_window, elem->r, elem->g, elem->b);
     erase(0,0,0,1);
     image_draw_3x3(current_window);
   }
   else {
     erase(0,0,0,1);
-    image_subimage(this_e->theme->window_folded, &current_window,
-                   0,fold_height*(this_e->set.window.state > 2 ? 0: this_e->set.window.state),
-                   this_e->theme->window_folded.original_width, fold_height);
+    image_subimage(elem->theme->window_folded, &current_window,
+                   0,fold_height*(elem->set.window.state > 2 ? 0: elem->set.window.state),
+                   elem->theme->window_folded.source_width, fold_height);
     image_draw_3x3s(current_window,0,0,width,fold_height);
   }
 
   // Edge highlights for resizing
   if(new_state >= 3) {
     int zone = gui_find_section(window_height/3);
-    if (!this_e->set.window.fold) {
-      image_draw_3x3_section(this_e->theme->window_highlight, width,height, zone);
+    if (!elem->set.window.fold) {
+      image_draw_3x3_section(elem->theme->window_highlight, width,height, zone);
     }
   }
 
   // Draw caption buttons
-  if(this_e->set.window.closable) {
+  if(elem->set.window.closable) {
     Image close_button;
-    image_subimage(this_e->theme->window_captions, &close_button,
+    image_subimage(elem->theme->window_captions, &close_button,
                    0, close_state*caption_height,
                    caption_width, caption_height);
     image_draw(close_button, width-caption_width,0);
   }
-  if(this_e->set.window.foldable) {
+  if(elem->set.window.foldable) {
     Image fold_button;
-    image_subimage(this_e->theme->window_captions, &fold_button,
-                   caption_width*(this_e->set.window.fold+1), fold_state*caption_height,
+    image_subimage(elem->theme->window_captions, &fold_button,
+                   caption_width*(elem->set.window.fold+1), fold_state*caption_height,
                    caption_width, caption_height);
-    if(this_e->set.window.closable) { image_draw(fold_button, width-caption_width*2,0); }
+    if(elem->set.window.closable) { image_draw(fold_button, width-caption_width*2,0); }
     else                            { image_draw(fold_button, width-caption_width,0); }
   }
 
-  gui_draw_label(this_e->theme->font, this_e->set.window.text,
-                 this_e->theme->window_title_offset,0,
-                 width, caption_height, this_e->set.window.text_align);
+  gui_draw_label(elem->theme->font, elem->set.window.text,
+                 elem->theme->window_title_offset,0,
+                 width, caption_height, elem->set.window.text_align);
 
-  this_e->redraw = 0;
+  elem->redraw = 0;
 }
 
 
-void gui_label(GUIElement* this_e) {
+void gui_label() {
+  GUIElement* elem = this_element();
   if (transp == 1) return;
 
-  if(strcmp(text, this_e->set.label.text)) {
-    strncpy(this_e->set.label.text, text, 256);
-    this_e->redraw=1;
+  if(strcmp(text, elem->set.label.text)) {
+    strncpy(elem->set.label.text, text, 256);
+    elem->redraw=1;
   }
 
-  if(!this_e->redraw) return;
+  if(!elem->redraw) return;
   erase(0,0,0,1);
-  gui_draw_label(this_e->theme->font, this_e->set.label.text, this_e->theme->text_offset.x, this_e->theme->text_offset.y, width, height, this_e->set.label.align);
+  gui_draw_label(elem->theme->font, elem->set.label.text, elem->theme->text_offset.x, elem->theme->text_offset.y, width, height, elem->set.label.align);
 
-  this_e->redraw = 0;
+  elem->redraw = 0;
 }
 
 
-void gui_meter(GUIElement* this_e) {
-  const double b_width = width - this_e->theme->meter_offset*2;
-  const int bar_length = (int)(b_width*((double)this_e->set.meter.value/(double)this_e->set.meter.max));
-  const Image* cur     = &this_e->theme->meter;
+void gui_meter() {
+  GUIElement* elem = this_element();
+  const double b_width = width - elem->theme->meter_offset*2;
+  const int bar_length = (int)(b_width*((double)elem->set.meter.value/(double)elem->set.meter.max));
+  const Image* cur     = &elem->theme->meter;
   Image first_layer, second_layer;
 
   if (transp == 1) return;
 
-  if      (this_e->set.meter.value < 0) { this_e->set.meter.value = 0; }
-  else if (this_e->set.meter.value > this_e->set.meter.max) { this_e->set.meter.value = this_e->set.meter.max; }
+  if      (elem->set.meter.value < 0) { elem->set.meter.value = 0; }
+  else if (elem->set.meter.value > elem->set.meter.max) { elem->set.meter.value = elem->set.meter.max; }
 
-  if(this_e->set.meter.last_value != this_e->set.meter.value) {
-    this_e->set.meter.last_value = this_e->set.meter.value;
-    this_e->redraw=1;
+  if(elem->set.meter.last_value != elem->set.meter.value) {
+    elem->set.meter.last_value = elem->set.meter.value;
+    elem->redraw=1;
   }
 
-  if(!this_e->redraw) return;
-  image_subimage(*cur, &first_layer,  0,cur->original_height/2, cur->original_width,cur->original_height/2);
-  image_subimage(*cur, &second_layer, 0,0, cur->original_width,cur->original_height/2);
+  if(!elem->redraw) return;
+  image_subimage(*cur, &first_layer,  0,cur->source_height/2, cur->source_width,cur->source_height/2);
+  image_subimage(*cur, &second_layer, 0,0, cur->source_width,cur->source_height/2);
   erase(0,0,0,1);
-  image_setrgb(&second_layer, this_e->r, this_e->g, this_e->b);
+  image_setrgb(&second_layer, elem->r, elem->g, elem->b);
   image_draw_3x3(first_layer);
-  if(bar_length > 0) image_draw_3x3s(second_layer, this_e->theme->meter_offset,0, bar_length, height);
-  gui_draw_label(this_e->theme->font, this_e->set.meter.text,
-                 this_e->theme->text_offset.x,this_e->theme->text_offset.y,
+  if(bar_length > 0) image_draw_3x3s(second_layer, elem->theme->meter_offset,0, bar_length, height);
+  gui_draw_label(elem->theme->font, elem->set.meter.text,
+                 elem->theme->text_offset.x,elem->theme->text_offset.y,
                  width, height, 'c');
-  this_e->redraw=0;
+  elem->redraw=0;
 }
 
 
-void gui_slider(GUIElement* this_e) {
-  const double b_width = width - this_e->theme->slider_offset*2;
+void gui_slider() {
+  GUIElement* elem = this_element();
+  const double b_width = width - elem->theme->slider_offset*2;
   double b_percent;
   int bar_length, handle_pos;
   char label_text[32];
-  const Image* cur = &this_e->theme->slider;
+  const Image* cur = &elem->theme->slider;
   Image first_layer, second_layer, handle;
 
   if (transp == 1) return;
 
-  if (this_e->set.slider.state == 1) { // drag
-    int x_mouse   = xmouse - xscreen - this_e->theme->slider_offset;
+  if (elem->set.slider.state == 1) { // drag
+    int x_mouse   = xmouse - xscreen - elem->theme->slider_offset;
     double x_percent;
 
     if      (x_mouse > b_width) { x_mouse = b_width; }
     else if (x_mouse < 0)       { x_mouse = 0; }
 
     x_percent = (double)x_mouse / (double)b_width;
-    this_e->set.slider.value = ((this_e->set.slider.max-this_e->set.slider.min) * x_percent) + this_e->set.slider.min;
+    elem->set.slider.value = ((elem->set.slider.max-elem->set.slider.min) * x_percent) + elem->set.slider.min;
   }
 
-  if      (this_e->set.slider.value < this_e->set.slider.min) { this_e->set.slider.value = this_e->set.slider.min; }
-  else if (this_e->set.slider.value > this_e->set.slider.max) { this_e->set.slider.value = this_e->set.slider.max; }
+  if      (elem->set.slider.value < elem->set.slider.min) { elem->set.slider.value = elem->set.slider.min; }
+  else if (elem->set.slider.value > elem->set.slider.max) { elem->set.slider.value = elem->set.slider.max; }
 
-  b_percent  = ((double)(this_e->set.slider.value-this_e->set.slider.min)/(double)(this_e->set.slider.max-this_e->set.slider.min));
+  b_percent  = ((double)(elem->set.slider.value-elem->set.slider.min)/(double)(elem->set.slider.max-elem->set.slider.min));
   bar_length = b_width * b_percent;
 
-  if(this_e->set.slider.last_value != this_e->set.slider.value) {
-    this_e->set.slider.last_value = this_e->set.slider.value;
-    this_e->redraw = 1;
+  if(elem->set.slider.last_value != elem->set.slider.value) {
+    elem->set.slider.last_value = elem->set.slider.value;
+    elem->redraw = 1;
   }
 
-  if(!this_e->redraw) return;
-  image_subimage(*cur, &first_layer,  0,0,cur->original_width,cur->original_height/3);
-  image_subimage(*cur, &second_layer, 0,cur->original_height/3, cur->original_width,cur->original_height/3);
-  image_subimage(*cur, &handle,       0,cur->original_height/3*2, cur->original_width,cur->original_height/3);
+  if(!elem->redraw) return;
+  image_subimage(*cur, &first_layer,  0,0,cur->source_width,cur->source_height/3);
+  image_subimage(*cur, &second_layer, 0,cur->source_height/3, cur->source_width,cur->source_height/3);
+  image_subimage(*cur, &handle,       0,cur->source_height/3*2, cur->source_width,cur->source_height/3);
   erase(0,0,0,1);
-  image_setrgb(&second_layer, this_e->r, this_e->g, this_e->b);
+  image_setrgb(&second_layer, elem->r, elem->g, elem->b);
   image_draw_3x3(first_layer);
-  if(bar_length > 0) image_draw_3x3s(second_layer, this_e->theme->slider_offset,0, bar_length, height);
+  if(bar_length > 0) image_draw_3x3s(second_layer, elem->theme->slider_offset,0, bar_length, height);
 
-  handle_pos = (b_percent * (double)(b_width - this_e->theme->slider_handle_width)) + this_e->theme->slider_offset;
-  image_draw_3x3s(handle, handle_pos,0, handle.original_width, height);
+  handle_pos = (b_percent * (double)(b_width - elem->theme->slider_handle_width)) + elem->theme->slider_offset;
+  image_draw_3x3s(handle, handle_pos,0, handle.source_width, height);
 
-  if (this_e->set.slider.show_value) {
-    sprintf(label_text, "%d", this_e->set.slider.value);
-    gui_draw_label(this_e->theme->font, label_text,
-                   this_e->theme->slider_offset + this_e->theme->text_offset.x + 4,
-                   this_e->theme->text_offset.y, width, height,
-                   (this_e->set.slider.value - this_e->set.slider.min) > (this_e->set.slider.max-this_e->set.slider.min)/2 ? 'l' : 'r');
+  if (elem->set.slider.show_value) {
+    sprintf(label_text, "%d", elem->set.slider.value);
+    gui_draw_label(elem->theme->font, label_text,
+                   elem->theme->slider_offset + elem->theme->text_offset.x + 4,
+                   elem->theme->text_offset.y, width, height,
+                   (elem->set.slider.value - elem->set.slider.min) > (elem->set.slider.max-elem->set.slider.min)/2 ? 'l' : 'r');
   }
-  this_e->redraw = 0;
+  elem->redraw = 0;
 }
 
-void gui_textbox(GUIElement* this_e) {
-  const Image* cur        = &this_e->theme->textbox;
-  const int    x_padding  = cur->original_width/3;
+void gui_textbox() {
+  GUIElement* elem = this_element();
+  const Image* cur        = &elem->theme->textbox;
+  const int    x_padding  = cur->source_width/3;
   const int    x_mouse    = min(max(xmouse - xscreen, 0), width);
-  int          car_pos    = this_e->theme->font.char_width*this_e->set.textbox.caret.pos + x_padding;
+  int          car_pos    = elem->theme->font.char_width*elem->set.textbox.caret.pos + x_padding;
   int          select_init, select_size;
   Image base, caret, select;
 
   if (transp == 1) { return; }
 
-  if (this_e->set.textbox.state == 1)  { // dragging
-    this_e->set.textbox.caret.pos = min(strlen(this_e->set.textbox.text) * this_e->theme->font.char_width,
-                                       ((float)(this_e->set.textbox.shift*-1) + x_mouse - x_padding + this_e->theme->font.char_width/2 ) / (float)this_e->theme->font.char_width);
-    if (this_e->set.textbox.caret.pos < 0) { this_e->set.textbox.caret.pos = 0; }
-    if (this_e->set.textbox.caret.pos > strlen(this_e->set.textbox.text)) { this_e->set.textbox.caret.pos = strlen(this_e->set.textbox.text); }
+  if (elem->set.textbox.state == 1)  { // dragging
+    elem->set.textbox.caret.pos = min(strlen(elem->set.textbox.text) * elem->theme->font.char_width,
+                                       ((float)(elem->set.textbox.shift*-1) + x_mouse - x_padding + elem->theme->font.char_width/2 ) / (float)elem->theme->font.char_width);
+    if (elem->set.textbox.caret.pos < 0) { elem->set.textbox.caret.pos = 0; }
+    if (elem->set.textbox.caret.pos > strlen(elem->set.textbox.text)) { elem->set.textbox.caret.pos = strlen(elem->set.textbox.text); }
   }
 
-  if (car_pos + this_e->set.textbox.shift  > width - x_padding && width - car_pos - x_padding < this_e->set.textbox.shift) {
-    this_e->set.textbox.shift = (width - car_pos) - x_padding;
+  if (car_pos + elem->set.textbox.shift  > width - x_padding && width - car_pos - x_padding < elem->set.textbox.shift) {
+    elem->set.textbox.shift = (width - car_pos) - x_padding;
   }
-  else if (car_pos + this_e->set.textbox.shift < x_padding) {
-    this_e->set.textbox.shift = (0 - car_pos) + x_padding;
+  else if (car_pos + elem->set.textbox.shift < x_padding) {
+    elem->set.textbox.shift = (0 - car_pos) + x_padding;
   }
 
-  if (this_e->focus) {
-    this_e->set.textbox.caret.timer += 1;
-    if (this_e->set.textbox.caret.timer == this_e->set.textbox.caret.speed)   { this_e->redraw = 1; }
-    if (this_e->set.textbox.caret.timer == this_e->set.textbox.caret.speed*2) {
-      this_e->redraw = 1;
-      this_e->set.textbox.caret.timer = 0;
+  if (elem->focus) {
+    elem->set.textbox.caret.timer += 1;
+    if (elem->set.textbox.caret.timer == elem->set.textbox.caret.speed)   { elem->redraw = 1; }
+    if (elem->set.textbox.caret.timer == elem->set.textbox.caret.speed*2) {
+      elem->redraw = 1;
+      elem->set.textbox.caret.timer = 0;
     }
   }
-  else { this_e->set.textbox.select_start = -1; }
+  else { elem->set.textbox.select_start = -1; }
 
-  if (this_e->set.textbox.caret.pos > strlen(this_e->set.textbox.text)) { this_e->set.textbox.caret.pos = strlen(this_e->set.textbox.text); }
+  if (elem->set.textbox.caret.pos > strlen(elem->set.textbox.text)) { elem->set.textbox.caret.pos = strlen(elem->set.textbox.text); }
 
-  select_init = min(this_e->set.textbox.select_start, this_e->set.textbox.caret.pos);
-  select_size = max(this_e->set.textbox.select_start, this_e->set.textbox.caret.pos) - select_init;
+  select_init = min(elem->set.textbox.select_start, elem->set.textbox.caret.pos);
+  select_size = max(elem->set.textbox.select_start, elem->set.textbox.caret.pos) - select_init;
 
-  if(!this_e->redraw) return;
-  image_subimage(*cur, &base,  0,cur->original_height/4*this_e->focus,cur->original_width,cur->original_height/4);
-  image_subimage(*cur, &caret, 0,cur->original_height/4*2, cur->original_width, cur->original_height/4);
-  image_subimage(*cur, &select,0,cur->original_height/4*3, cur->original_width, cur->original_height/4);
+  if(!elem->redraw) return;
+  image_subimage(*cur, &base,  0,cur->source_height/4*elem->focus,cur->source_width,cur->source_height/4);
+  image_subimage(*cur, &caret, 0,cur->source_height/4*2, cur->source_width, cur->source_height/4);
+  image_subimage(*cur, &select,0,cur->source_height/4*3, cur->source_width, cur->source_height/4);
   erase(0,0,0,1);
   image_draw_3x3(base);
-  if (this_e->set.textbox.select_start != -1 && this_e->set.textbox.caret.pos - this_e->set.textbox.select_start != 0) {
-    image_draw_3x3s(select, ((select_init+1)*this_e->theme->font.char_width) + this_e->set.textbox.shift - 2,
-                    height/2 - this_e->theme->font.char_height/2,
-                    select_size*this_e->theme->font.char_width + 2,
-                    this_e->theme->font.char_height);
+  if (elem->set.textbox.select_start != -1 && elem->set.textbox.caret.pos - elem->set.textbox.select_start != 0) {
+    image_draw_3x3s(select, ((select_init+1)*elem->theme->font.char_width) + elem->set.textbox.shift - 2,
+                    height/2 - elem->theme->font.char_height/2,
+                    select_size*elem->theme->font.char_width + 2,
+                    elem->theme->font.char_height);
   }
-  text_draw_offset(this_e->theme->font, this_e->set.textbox.text,
-    x_padding + this_e->set.textbox.shift, height/2 - this_e->theme->font.height/2);
-  if (this_e->focus && this_e->set.textbox.caret.timer < this_e->set.textbox.caret.speed) {
-    image_draw(caret, car_pos + this_e->set.textbox.shift, height/2 - caret.original_height/2);
+  text_draw_offset(elem->theme->font, elem->set.textbox.text,
+    x_padding + elem->set.textbox.shift, height/2 - elem->theme->font.height/2);
+  if (elem->focus && elem->set.textbox.caret.timer < elem->set.textbox.caret.speed) {
+    image_draw(caret, car_pos + elem->set.textbox.shift, height/2 - caret.source_height/2);
   }
 }
 
@@ -863,8 +867,11 @@ void gui_textbox(GUIElement* this_e) {
 // |___ |___ |___  |  | |___ | \|  |      |  | /~~\ | \| /~~\ \__> |___ |  \
 //
 
+void gui_create(GUIType type, char properties[]);
+void gui_draw();
+
 void do_gui(char type[]) {
-  GUIElement* this_e;
+  GUIElement* elem;
 
   if (GUI_ID==0) {
     char buffers[2][256];
@@ -943,165 +950,165 @@ void do_gui(char type[]) {
     return;
   }
 
-  this_e = this_element();
-  switch(this_e->type) {
+  elem = this_element();
+  switch(elem->type) {
     default:
       erase(255,0,0,0);
       break;
 
     case GUI_OBJECT: break;
-    case GUI_BUTTON:  gui_button(this_e);  break;
-    case GUI_WINDOW:  gui_window(this_e);  break;
-    case GUI_LABEL:   gui_label(this_e);   break;
-    case GUI_METER:   gui_meter(this_e);   break;
-    case GUI_SLIDER:  gui_slider(this_e);  break;
-    case GUI_TEXTBOX: gui_textbox(this_e); break;
+    case GUI_BUTTON:  gui_button();  break;
+    case GUI_WINDOW:  gui_window();  break;
+    case GUI_LABEL:   gui_label();   break;
+    case GUI_METER:   gui_meter();   break;
+    case GUI_SLIDER:  gui_slider();  break;
+    case GUI_TEXTBOX: gui_textbox(); break;
 
     case GUI_MENU: {
-      if(this_e->set.menu.active) { transp=0; }
+      if(elem->set.menu.active) { transp=0; }
       else { transp=1; }
 
-      if(!this_e->redraw) break;
+      if(!elem->redraw) break;
       erase(0,0,0,1);
-      image_draw_3x3(this_e->theme->menu);
-      this_e->redraw=0;
+      image_draw_3x3(elem->theme->menu);
+      elem->redraw=0;
     } break;
   }
 }
 
 void gui_mousedown() {
-  GUIElement* this_e = this_element();
+  GUIElement* elem = this_element();
   int i;
   for(i=0; i<GUIData.num_elements; i++) {
     GUIData.elements[i].focus = 0;
   }
-  this_e->focus = 1;
+  elem->focus = 1;
 
-  switch(this_e->type) {
+  switch(elem->type) {
     case GUI_BUTTON: {
-      if(!this_e->enabled) break;
-      this_e->set.button.state=2;
-      this_e->redraw=1;
+      if(!elem->enabled) break;
+      elem->set.button.state=2;
+      elem->redraw=1;
     } break;
 
     case GUI_SLIDER: {
-      this_e->set.slider.state = 1;
-      this_e->redraw=1;
+      elem->set.slider.state = 1;
+      elem->redraw=1;
     } break;
 
     case GUI_WINDOW: {
-      const int caption_width  = this_e->theme->window_captions.original_width/3;
-      const int caption_height = this_e->theme->window_captions.original_height/3;
+      const int caption_width  = elem->theme->window_captions.source_width/3;
+      const int caption_height = elem->theme->window_captions.source_height/3;
       // Edge resizing
-      if(hotspot(0,0,width,height) && !hotspot(3,3,width-3,height-3) && this_e->set.window.resizable) {
-        int zone = gui_find_section(this_e->theme->window_highlight.original_height/3);
-        if (this_e->set.window.fold) {
+      if(hotspot(0,0,width,height) && !hotspot(3,3,width-3,height-3) && elem->set.window.resizable) {
+        int zone = gui_find_section(elem->theme->window_highlight.source_height/3);
+        if (elem->set.window.fold) {
           if(zone == 1 || zone == 4 || zone == 7) {
-            this_e->set.window.state = 3 + 4;
-            this_e->redraw = 1;
+            elem->set.window.state = 3 + 4;
+            elem->redraw = 1;
           }
           else if (zone == 3 || zone == 6 || zone == 9) {
-            this_e->set.window.state = 3 + 6;
-            this_e->redraw = 1;
+            elem->set.window.state = 3 + 6;
+            elem->redraw = 1;
           }
           break;
         }
-        this_e->set.window.state = 3 + zone;
-        this_e->redraw=1;
+        elem->set.window.state = 3 + zone;
+        elem->redraw=1;
         break;
       }
 
       // Caption buttons
-      if(this_e->set.window.closable && hotspot(width-caption_width,0, width,caption_height)) {
-        this_e->set.window.close_state = 2;
-        this_e->redraw=1;
+      if(elem->set.window.closable && hotspot(width-caption_width,0, width,caption_height)) {
+        elem->set.window.close_state = 2;
+        elem->redraw=1;
         break;
       }
-      if(this_e->set.window.foldable) {
-        if(this_e->set.window.closable) {
+      if(elem->set.window.foldable) {
+        if(elem->set.window.closable) {
           if(hotspot(width-caption_width*2,0, width-caption_width,caption_height)) {
-            this_e->set.window.fold_state = 2;
-            this_e->redraw=1;
+            elem->set.window.fold_state = 2;
+            elem->redraw=1;
             break;
           }
         }
         else if (hotspot(width-caption_width,0, width,caption_height)) {
-          this_e->set.window.fold_state = 2;
-          this_e->redraw=1;
+          elem->set.window.fold_state = 2;
+          elem->redraw=1;
           break;
         }
       }
 
       // Title bar drag
-      if(hotspot(0,0,width,(this_e->theme->window.height/2)/3)) {
+      if(hotspot(0,0,width,(elem->theme->window.height/2)/3)) {
         int i;
-        this_e->set.window.state=2; // dragging
-        this_e->set.window.offset.x = xmouse-xscreen;
-        this_e->set.window.offset.y = ymouse-yscreen;
-        this_e->redraw=1;
+        elem->set.window.state=2; // dragging
+        elem->set.window.offset.x = xmouse-xscreen;
+        elem->set.window.offset.y = ymouse-yscreen;
+        elem->redraw=1;
       }
     } break;
 
     case GUI_TEXTBOX: {
       int new_pos;
-      const int x_padding = this_e->theme->textbox.original_width/3;
+      const int x_padding = elem->theme->textbox.source_width/3;
       const int x_mouse   = min(max(xmouse - xscreen, 0), width);
-      this_e->set.textbox.caret.pos = ((float)(this_e->set.textbox.shift*-1) + x_mouse - x_padding + this_e->theme->font.char_width/2 ) / (float)this_e->theme->font.char_width;
-      this_e->set.textbox.caret.pos = min(max(this_e->set.textbox.caret.pos, 0), strlen(this_e->set.textbox.text));
-      this_e->set.textbox.select_start = this_e->set.textbox.caret.pos;
-      this_e->set.textbox.state = 1;
+      elem->set.textbox.caret.pos = ((float)(elem->set.textbox.shift*-1) + x_mouse - x_padding + elem->theme->font.char_width/2 ) / (float)elem->theme->font.char_width;
+      elem->set.textbox.caret.pos = min(max(elem->set.textbox.caret.pos, 0), strlen(elem->set.textbox.text));
+      elem->set.textbox.select_start = elem->set.textbox.caret.pos;
+      elem->set.textbox.state = 1;
     } break;
   }
 }
 
 
 void gui_mouseup() {
-  GUIElement* this_e = this_element();
-  switch(this_e->type) {
+  GUIElement* elem = this_element();
+  switch(elem->type) {
     case GUI_BUTTON: {
-      this_e->set.button.state=0;
-      this_e->redraw=1;
+      elem->set.button.state=0;
+      elem->redraw=1;
     } break;
 
     case GUI_SLIDER: {
-      this_e->set.slider.state=0;
-      this_e->redraw=1;
+      elem->set.slider.state=0;
+      elem->redraw=1;
     } break;
 
     case GUI_WINDOW: {
-      const int caption_width  = this_e->theme->window_captions.original_width/3;
-      const int caption_height = this_e->theme->window_captions.original_height/3;
-      if(this_e->set.window.closable && hotspot(width-caption_width,0, width,caption_height)) {
-        this_e->enabled = 0;
+      const int caption_width  = elem->theme->window_captions.source_width/3;
+      const int caption_height = elem->theme->window_captions.source_height/3;
+      if(elem->set.window.closable && hotspot(width-caption_width,0, width,caption_height)) {
+        elem->enabled = 0;
       }
-      if(this_e->set.window.foldable) {
-        if(this_e->set.window.closable) {
+      if(elem->set.window.foldable) {
+        if(elem->set.window.closable) {
           if(hotspot(width-caption_width*2,0, width-caption_width,caption_height)) {
-            this_e->set.window.fold = !this_e->set.window.fold;
+            elem->set.window.fold = !elem->set.window.fold;
           }
         }
         else if (hotspot(width-caption_width,0, width,caption_height)) {
-          this_e->set.window.fold = !this_e->set.window.fold;
+          elem->set.window.fold = !elem->set.window.fold;
         }
       }
-      this_e->set.window.close_state = 0;
-      this_e->set.window.fold_state = 0;
-      this_e->set.window.state=0;
-      this_e->redraw=1;
+      elem->set.window.close_state = 0;
+      elem->set.window.fold_state = 0;
+      elem->set.window.state=0;
+      elem->redraw=1;
     } break;
 
     case GUI_TEXTBOX: {
-      if (this_e->set.textbox.select_start == this_e->set.textbox.caret.pos) {
-        this_e->set.textbox.select_start = -1;
+      if (elem->set.textbox.select_start == elem->set.textbox.caret.pos) {
+        elem->set.textbox.select_start = -1;
       }
-      this_e->set.textbox.state = 0;
+      elem->set.textbox.state = 0;
     } break;
   }
 }
 
 void gui_keydown() {
-  GUIElement* this_e = this_element();
-  switch(this_e->type) {
+  GUIElement* elem = this_element();
+  switch(elem->type) {
     case GUI_TEXTBOX: {
       // This is used because Game-Editor uses ANSI C, so we can't
       // even use a const int to declare array size, but I'd like
@@ -1110,7 +1117,7 @@ void gui_keydown() {
       #define VIS_KEYS 64
       char* key      = GetKeyState();
       int   last_key = getLastKey();
-      char* dest     = this_e->set.textbox.text;
+      char* dest     = elem->set.textbox.text;
       int   pos, is_visible=0;
 
       // Store a key -> result dictionary for any keys that produce visible
@@ -1147,73 +1154,73 @@ void gui_keydown() {
         '+', '='
       };
 
-      if (!this_e->focus) { break; }
+      if (!elem->focus) { break; }
 
       // This resets the caret blink timer while typing, so that the caret
       // doesn't go away as long as you're still pressing keys.
-      this_e->set.textbox.caret.timer = 0;
+      elem->set.textbox.caret.timer = 0;
 
       // Any halting command characters
       // The main reason these are in IF statements instead of
       // a switch case is that we want to be able to break out of
       // the overarching switch case early.
       if (last_key == KEY_LEFT) {
-        if      (!key[KEY_LSHIFT] && !key[KEY_RSHIFT])    { this_e->set.textbox.select_start = -1; }
-        else if (this_e->set.textbox.select_start == -1) { this_e->set.textbox.select_start = this_e->set.textbox.caret.pos; }
-        this_e->set.textbox.caret.pos = max(this_e->set.textbox.caret.pos-1, 0);
+        if      (!key[KEY_LSHIFT] && !key[KEY_RSHIFT])    { elem->set.textbox.select_start = -1; }
+        else if (elem->set.textbox.select_start == -1) { elem->set.textbox.select_start = elem->set.textbox.caret.pos; }
+        elem->set.textbox.caret.pos = max(elem->set.textbox.caret.pos-1, 0);
         break;
       }
 
       if (last_key == KEY_RIGHT) {
-        if      (!key[KEY_LSHIFT] && !key[KEY_RSHIFT])    { this_e->set.textbox.select_start = -1; }
-        else if (this_e->set.textbox.select_start == -1) { this_e->set.textbox.select_start = this_e->set.textbox.caret.pos; }
-        this_e->set.textbox.caret.pos = min(this_e->set.textbox.caret.pos+1, strlen(this_e->set.textbox.text));
+        if      (!key[KEY_LSHIFT] && !key[KEY_RSHIFT])    { elem->set.textbox.select_start = -1; }
+        else if (elem->set.textbox.select_start == -1) { elem->set.textbox.select_start = elem->set.textbox.caret.pos; }
+        elem->set.textbox.caret.pos = min(elem->set.textbox.caret.pos+1, strlen(elem->set.textbox.text));
         break;
       }
 
       if (last_key == KEY_END) {
-        if      (!key[KEY_LSHIFT] && !key[KEY_RSHIFT])    { this_e->set.textbox.select_start = -1; }
-        else if (this_e->set.textbox.select_start == -1) { this_e->set.textbox.select_start = this_e->set.textbox.caret.pos; }
-        this_e->set.textbox.caret.pos = strlen(this_e->set.textbox.text);
+        if      (!key[KEY_LSHIFT] && !key[KEY_RSHIFT])    { elem->set.textbox.select_start = -1; }
+        else if (elem->set.textbox.select_start == -1) { elem->set.textbox.select_start = elem->set.textbox.caret.pos; }
+        elem->set.textbox.caret.pos = strlen(elem->set.textbox.text);
         break;
       }
 
       if (last_key == KEY_HOME) {
-        if      (!key[KEY_LSHIFT] && !key[KEY_RSHIFT])    { this_e->set.textbox.select_start = -1; }
-        else if (this_e->set.textbox.select_start == -1) { this_e->set.textbox.select_start = this_e->set.textbox.caret.pos; }
-        this_e->set.textbox.caret.pos = 0;
+        if      (!key[KEY_LSHIFT] && !key[KEY_RSHIFT])    { elem->set.textbox.select_start = -1; }
+        else if (elem->set.textbox.select_start == -1) { elem->set.textbox.select_start = elem->set.textbox.caret.pos; }
+        elem->set.textbox.caret.pos = 0;
         break;
       }
 
       if (last_key == KEY_BACKSPACE) {
         if (strlen(dest) == 0) { break; }
 
-        if (this_e->set.textbox.select_start != -1) {
+        if (elem->set.textbox.select_start != -1) {
           int init, len, i;
-          init = min(this_e->set.textbox.caret.pos, this_e->set.textbox.select_start);
-          len  = max(this_e->set.textbox.caret.pos, this_e->set.textbox.select_start) - init;
+          init = min(elem->set.textbox.caret.pos, elem->set.textbox.select_start);
+          len  = max(elem->set.textbox.caret.pos, elem->set.textbox.select_start) - init;
 
-          for (i=init; i<strlen(this_e->set.textbox.text); i++) {
+          for (i=init; i<strlen(elem->set.textbox.text); i++) {
             char res;
-            if (i + len > strlen(this_e->set.textbox.text)) { res = '\0'; }
-            else { res = this_e->set.textbox.text[i + len]; }
-            this_e->set.textbox.text[i] = this_e->set.textbox.text[i + len];
+            if (i + len > strlen(elem->set.textbox.text)) { res = '\0'; }
+            else { res = elem->set.textbox.text[i + len]; }
+            elem->set.textbox.text[i] = elem->set.textbox.text[i + len];
           }
 
-          this_e->set.textbox.caret.pos    = init;
-          this_e->set.textbox.shift       += len * this_e->theme->font.char_width;
-          if (this_e->set.textbox.shift > 0) { this_e->set.textbox.shift = 0; }
-          this_e->set.textbox.select_start = -1;
+          elem->set.textbox.caret.pos    = init;
+          elem->set.textbox.shift       += len * elem->theme->font.char_width;
+          if (elem->set.textbox.shift > 0) { elem->set.textbox.shift = 0; }
+          elem->set.textbox.select_start = -1;
           break;
         }
         else {
-          if (this_e->set.textbox.caret.pos == 0) { break; }
-          chrremove(dest, this_e->set.textbox.caret.pos-1);
-          this_e->set.textbox.caret.pos--;
+          if (elem->set.textbox.caret.pos == 0) { break; }
+          chrremove(dest, elem->set.textbox.caret.pos-1);
+          elem->set.textbox.caret.pos--;
 
-          if (this_e->set.textbox.shift < 0) {
-            this_e->set.textbox.shift += this_e->theme->font.char_width;
-            this_e->set.textbox.shift  = min(this_e->set.textbox.shift, 0);
+          if (elem->set.textbox.shift < 0) {
+            elem->set.textbox.shift += elem->theme->font.char_width;
+            elem->set.textbox.shift  = min(elem->set.textbox.shift, 0);
           }
         }
         break;
@@ -1221,20 +1228,20 @@ void gui_keydown() {
 
       if (last_key == KEY_RETURN ||
           last_key == KEY_PAD_ENTER) {
-        this_e->set.textbox.select_start = -1;
+        elem->set.textbox.select_start = -1;
         break;
       }
 
       if ( last_key == KEY_ESCAPE ) {
-        this_e->set.textbox.select_start = -1;
-        this_e->focus = 0; break;
+        elem->set.textbox.select_start = -1;
+        elem->focus = 0; break;
       }
 
       // Modifier keys
       if (key[KEY_LCTRL] || key[KEY_RCTRL]) {
         if (last_key == KEY_a) {
-          this_e->set.textbox.select_start = 0;
-          this_e->set.textbox.caret.pos    = strlen(this_e->set.textbox.text);
+          elem->set.textbox.select_start = 0;
+          elem->set.textbox.caret.pos    = strlen(elem->set.textbox.text);
         }
         break;
       }
@@ -1249,25 +1256,25 @@ void gui_keydown() {
         else dict = keys_lowercase;
 
 
-        if (this_e->set.textbox.select_start != -1) {
+        if (elem->set.textbox.select_start != -1) {
           int init, len, i;
-          init = min(this_e->set.textbox.caret.pos, this_e->set.textbox.select_start);
-          len  = max(this_e->set.textbox.caret.pos, this_e->set.textbox.select_start) - init;
+          init = min(elem->set.textbox.caret.pos, elem->set.textbox.select_start);
+          len  = max(elem->set.textbox.caret.pos, elem->set.textbox.select_start) - init;
 
-          for (i=init; i<strlen(this_e->set.textbox.text); i++) {
+          for (i=init; i<strlen(elem->set.textbox.text); i++) {
             char res;
-            if (i + len > strlen(this_e->set.textbox.text)) { res = '\0'; }
-            else { res = this_e->set.textbox.text[i + len]; }
-            this_e->set.textbox.text[i] = this_e->set.textbox.text[i + len];
+            if (i + len > strlen(elem->set.textbox.text)) { res = '\0'; }
+            else { res = elem->set.textbox.text[i + len]; }
+            elem->set.textbox.text[i] = elem->set.textbox.text[i + len];
           }
 
-          this_e->set.textbox.caret.pos    = init;
-          this_e->set.textbox.select_start = -1;
+          elem->set.textbox.caret.pos    = init;
+          elem->set.textbox.select_start = -1;
         }
 
-        if (strlen(this_e->set.textbox.text) > this_e->set.textbox.max_size) { break; }
-        chrinsert(dest, this_e->set.textbox.caret.pos, dict[pos]);
-        this_e->set.textbox.caret.pos++;
+        if (strlen(elem->set.textbox.text) > elem->set.textbox.max_size) { break; }
+        chrinsert(dest, elem->set.textbox.caret.pos, dict[pos]);
+        elem->set.textbox.caret.pos++;
       }
 
       #undef VIS_KEYS

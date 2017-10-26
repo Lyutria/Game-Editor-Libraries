@@ -5,8 +5,8 @@ Image image_gen_debug_font() {
   // Color Index:
   struct Pixel c0 = {255,255,255};
   strcpy(gi.name, "debug_font");
-  gi.width = 1338; gi.original_width = gi.width;
-  gi.height = 13; gi.original_height = gi.height;
+  gi.width = 1338; gi.source_width = gi.width;
+  gi.height = 13; gi.source_height = gi.height;
   gi.angle=0;
   gi.scale=1;
   gi.r=255;

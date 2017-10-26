@@ -48,18 +48,18 @@ void image_to_code(Image source, char gen_name[], char file_name[]) {
 
   // Generate a color index to reduce code length
   fprintf(dest_file, "  // Color Index:\n");
-  for(x=source.topleft.x; x<source.original_width; x++) {
-    for(y=source.topleft.y; y<source.original_height; y++){
+  for(x=source.topleft.x; x<source.source_width; x++) {
+    for(y=source.topleft.y; y<source.source_height; y++){
       int exists = 0;
 
       for (cur_index=0; cur_index<index_size; cur_index++) {
-        if (pixel_compare(source.data[x][y], index[cur_index])) { exists = 1; }
+        if (pixel_compare(pixel_get(source,x,y), index[cur_index])) { exists = 1; }
       }
 
       if (!exists) {
         index_size++;
         index = (Pixel*)realloc(index, (sizeof(Pixel) * index_size));
-        index[index_size-1] = source.data[x][y];
+        index[index_size-1] = pixel_get(source,x,y);
       }
     }
   }
@@ -91,7 +91,7 @@ void image_to_code(Image source, char gen_name[], char file_name[]) {
 
 
 
-  fprintf(dest_file, "  image_new(&i, %d, %d);\n",  source.original_width, source.original_height);
+  fprintf(dest_file, "  image_new(&i, %d, %d);\n",  source.source_width, source.source_height);
   fprintf(dest_file, "  strcpy(i.name, \"%s\");\n", gen_name);
   fprintf(dest_file, "  i.transparent.r   = %d;\n", source.transparent.r);
   fprintf(dest_file, "  i.transparent.g   = %d;\n", source.transparent.g);
@@ -110,21 +110,19 @@ void image_to_code(Image source, char gen_name[], char file_name[]) {
   fprintf(dest_file, "  i.char_width      = %d;\n", source.char_width);
   fprintf(dest_file, "  i.char_height     = %d;\n", source.char_height);
 
-  // TODO: Save palette information (after palettes are added)
-
   fprintf(dest_file, "\n  ");
-  for(x=source.topleft.x; x<source.original_width; x++) {
-    for(y=source.topleft.y; y<source.original_height; y++){
+  for(x; x<source.source_width; x++) {
+    for(y; y<source.source_height; y++){
       int seq_chunk=1;
       for (cur_index=0; cur_index<index_size; cur_index++) {
-        if (pixel_compare(source.data[x][y], index[cur_index])) { break; }
+        if (pixel_compare(pixel_get(source,x,y), index[cur_index])) { break; }
       }
 
       // If the next pixel in the column is also the same pixel, start
       // scanning for a consecutive chunk.
-      if (y < source.original_height-1 && pixel_compare(source.data[x][y+1], index[cur_index])) {
-        while (y+seq_chunk <= source.original_height-1 &&
-               pixel_compare(source.data[x][y+seq_chunk], index[cur_index])) {
+      if (y < source.source_height-1 && pixel_compare(pixel_get(source,x,y+1), index[cur_index])) {
+        while (y+seq_chunk <= source.source_height-1 &&
+               pixel_compare(pixel_get(source,x,y+seq_chunk), index[cur_index])) {
           seq_chunk++;
         }
 

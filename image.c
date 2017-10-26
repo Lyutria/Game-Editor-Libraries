@@ -25,20 +25,25 @@
 // .__/  |  |  \ \__/ \__,  |  .__/
 //
 
-typedef struct Pixel {
+typedef struct Pixel Pixel;
+typedef struct Image Image;
+typedef struct ImageGrid ImageGrid;
+typedef struct ImageFilter ImageFilter;
+
+struct Pixel {
   unsigned char r,g,b;
   float t;
-} Pixel;
+};
 
-typedef struct image_struct {
+struct Image {
   char name[64]; // Path to file from image_load()
 
-  short int original_width;
-  short int original_height;
+  short int source_width;
+  short int source_height;
   short int width;
   short int height;
   short int angle; // Todo
-  double    scale;    // Draw scale (1 is default)
+  double    scale; // Draw scale (1 is default)
 
   // Monitors topleft position to start in the loaded
   // image array. Used for getting sections of images
@@ -53,7 +58,6 @@ typedef struct image_struct {
   char      indexed;  // If image is using indexed-mode
   char      font;     // If the image has been designated as a font
   char      animation;// If the image has been designated as an animation
-  short int palette_size;
 
   short int characters; // # characters in font
   short int first_character; // First char in font
@@ -65,24 +69,23 @@ typedef struct image_struct {
   short int frame_speed[MAX_ANIMATION_LENGTH];
   float     frame_count;
 
-  short int r,g,b;
+  short int r,g,b; // Color value adjustment
 
   Pixel** data;
-  Pixel*  palette;
-  Pixel transparent; // Undrawn color
-} Image;
+  Pixel   transparent; // Undrawn color
+};
 
 // For use with image_gridsplit
 // Allows you to easily split an image into precise rows&columns and then
 // access them. Used heavily for drawing GUI elements (break an image into
 // corners and sides to stretch)
-typedef struct image_grid_struct {
+struct ImageGrid {
   Image** image;
   unsigned short int rows;
   unsigned short int columns;
   unsigned short int row_size;
   unsigned short int column_size;
-} ImageGrid;
+};
 
 //  __     __   __
 // |  \ | /__` |__) |     /\  \ /
@@ -96,9 +99,11 @@ typedef struct image_grid_struct {
 // of an image and draw each part at scale.
 //  Returns 0 if pixel wasn't drawn
 //  Returns 1 on success
-int putpixel_offset(double x_pos, double y_pos, double x_scale, double y_scale, double x_offset, double y_offset) {
+int pixel_draw_scale(Pixel pixel, double x_pos, double y_pos, double x_scale, double y_scale, double x_offset, double y_offset) {
   double x, y;
   if (x_offset+x_pos*x_scale > width || y_offset+y_pos*y_scale > height) { return 0; }
+
+  setpen(pixel.r, pixel.g, pixel.b, pixel.t, 1);
 
   if (x_offset+x_pos*x_scale+x_scale >= width || y_offset+y_pos*y_scale+y_scale >= height) {
     // Use putpixel instead of lineto() for accuracy on edges of canvas
@@ -128,33 +133,68 @@ int putpixel_offset(double x_pos, double y_pos, double x_scale, double y_scale, 
   return 1;
 }
 
+int pixel_draw(Pixel pixel, int x, int y) {
+  if (x < 0)      { return 0; }
+  if (y < 0)      { return 0; }
+  if (x > width)  { return 0; }
+  if (y > height) { return 0; }
+
+  setpen(pixel.r, pixel.g, pixel.b, pixel.t, 1);
+  putpixel(x, y);
+  return 1;
+}
+
+// Gets a pixel from an image at X and Y
+//  Returns a pixel with negative transparency value on failure ( -1 )
+//  Returns Pixel of [x][y] position adjusted for subimages on success
+Pixel pixel_get(Image source, int x, int y) {
+  Pixel fail = {0,0,0,-1};
+  if (x > source.source_width)  { debugf("PIXEL GET", "Out of range > x"); return fail; }
+  if (y > source.source_height) { debugf("PIXEL GET", "Out of range > y"); return fail; }
+  if (x < 0)                    { debugf("PIXEL GET", "Out of range < x"); return fail; }
+  if (y < 0)                    { debugf("PIXEL GET", "Out of range < y"); return fail; }
+  return source.data[x+source.topleft.x][y+source.topleft.y];
+}
+
+// Sets a pixel in an image at X and Y
+//  Returns 0 if not in range, not set
+//  Returns 1 on success
+int pixel_set(Image source, Pixel setter, int x, int y) {
+  if (x+source.topleft.x > source.source_width)  { debugf("PIXEL SET", "Out of range > x"); return 0; }
+  if (y+source.topleft.y > source.source_height) { debugf("PIXEL SET", "Out of range > y"); return 0; }
+  if (x < 0)                                     { debugf("PIXEL SET", "Out of range < x"); return 0; }
+  if (y < 0)                                     { debugf("PIXEL SET", "Out of range < y"); return 0; }
+  source.data[x+source.topleft.x][y+source.topleft.y] = setter;
+  return 1;
+}
+
 // Used to draw any portion of an image (end result of image_draw, text_draw)
-//  Returns 0 on halting error
+//  Returns 0 on error
 //  Returns # source pixels drawn on success
 int image_draw_section(Image source, int x_1, int y_1, int x_2, int y_2, int x_offset, int y_offset) {
-  const double x_scale = ((double)source.width  / (double)source.original_width)  * source.scale; // Calculate drawing scale
-  const double y_scale = ((double)source.height / (double)source.original_height) * source.scale;
+  const double x_scale = ((double)source.width  / (double)source.source_width)  * source.scale; // Calculate drawing scale
+  const double y_scale = ((double)source.height / (double)source.source_height) * source.scale;
   const int x1 = min(x_1, x_2), x2 = max(x_1, x_2); // Make sure the lower values are the correct values
   const int y1 = min(y_1, y_2), y2 = max(y_1, y_2);
   int x, y, last_x = -1, last_y = -1;
   int drawmode = 1;
   int count = 0;
 
-  if (source.data == NULL)         { debugf("IMAGE DRAW", "No image loaded in source"); return 0; }
-  if (source.original_width  <= 0) { debugf("IMAGE DRAW", "Invalid source width");      return 0; }
-  if (source.original_height <= 0) { debugf("IMAGE DRAW", "Invalid source height");     return 0; }
+  if (source.data == NULL)       { debugf("IMAGE DRAW", "No image loaded in source"); return 0; }
+  if (source.source_width  <= 0) { debugf("IMAGE DRAW", "Invalid source width");      return 0; }
+  if (source.source_height <= 0) { debugf("IMAGE DRAW", "Invalid source height");     return 0; }
 
   // Checks if we need to use putpixel_offset.
   // Because it's heavier than builtin putpixel, it's worth
   // not using it if the image hasn't been modified at all.
-  if(source.width == source.original_width &&
-     source.height == source.original_height &&
+  if(source.width == source.source_width &&
+     source.height == source.source_height &&
      source.scale == 1) {
     // Draw pixel for pixel from source
     drawmode = 1;
   }
-  else if (source.width >= source.original_width ||
-           source.height >= source.original_height) {
+  else if (source.width >= source.source_width ||
+           source.height >= source.source_height) {
     // Draw using draw-offset putpixel to scale pixels to the appropriate size
     drawmode = 2;
   } else {
@@ -166,13 +206,14 @@ int image_draw_section(Image source, int x_1, int y_1, int x_2, int y_2, int x_o
   // Instead of cutting down pointers for subimages, we use the topleft.x/y
   // to specify what part of the images is our subimage, and only getting
   // the pixels from that section of the source.
-  for(x=x1+source.topleft.x; x<x2+source.topleft.x; x++) {
-    const int x_pos = x_offset + (double)(x-x1-source.topleft.x)*x_scale;
+  for(x=x1; x<x2; x++) {
+    const int x_pos = x_offset + (double)(x-x1)*x_scale;
     if  (last_x == x_pos) { continue; }
     else last_x  = x_pos;
 
-    for(y=y1+source.topleft.y; y<y2+source.topleft.y; y++) {
-      const int y_pos = y_offset + (double)(y-y1-source.topleft.y)*y_scale;
+    for(y=y1; y<y2; y++) {
+      Pixel pixel = pixel_get(source, x, y);
+      const int y_pos = y_offset + (double)(y-y1)*y_scale;
       if  (last_y == y_pos) { continue; }
       else last_y  = y_pos;
 
@@ -181,35 +222,31 @@ int image_draw_section(Image source, int x_1, int y_1, int x_2, int y_2, int x_o
       // it is not drawn (to reduce draw steps).
       // If the pixel is transparent, then reset this so that if
       // the next pixel is at the spot, it's okay to draw.
-      if(source.data[x][y].r == source.transparent.r &&
-         source.data[x][y].g == source.transparent.g &&
-         source.data[x][y].b == source.transparent.b) {
+      if(pixel.r == source.transparent.r &&
+         pixel.g == source.transparent.g &&
+         pixel.b == source.transparent.b ||
+         pixel.t == 1) {
           last_x = -1;
           last_y = -1;
           continue;
       }
 
-
-      // Set the drawing color for the current pixel to the actual color
-      // modified by the Image structs RGB values, mimicing builtin actor
-      // coloring of GE.
-      setpen((double)source.data[x][y].r*((double)source.r/(double)255.0),
-             (double)source.data[x][y].g*((double)source.g/(double)255.0),
-             (double)source.data[x][y].b*((double)source.b/(double)255.0),
-             source.data[x][y].t, 1);
+      pixel.r = (double)pixel.r*((double)source.r/(double)255.0);
+      pixel.g = (double)pixel.g*((double)source.g/(double)255.0);
+      pixel.b = (double)pixel.b*((double)source.b/(double)255.0);
 
       switch(drawmode) {
         default:
         // Same as source image, draw direct.
         case 1:
-          if      (x-x1+x_offset-source.topleft.x > width)  { break; }
-          else if (y-y1+y_offset-source.topleft.y > height) { break; }
-          putpixel(x-x1+x_offset-source.topleft.x, y-y1+y_offset-source.topleft.y);
+          if      (x-x1+x_offset > width)  { break; }
+          else if (y-y1+y_offset > height) { break; }
+          pixel_draw(pixel, x-x1+x_offset, y-y1+y_offset);
           break;
 
         // Stretched in at least one direction.
         case 2:
-          putpixel_offset(x-x1-source.topleft.x, y-y1-source.topleft.y, x_scale, y_scale, x_offset, y_offset);
+          pixel_draw_scale(pixel, x-x1, y-y1, x_scale, y_scale, x_offset, y_offset);
           break;
 
         // Smaller than source image, use putpixel and discard extras.
@@ -217,9 +254,9 @@ int image_draw_section(Image source, int x_1, int y_1, int x_2, int y_2, int x_o
         // Sacrifices possibly important pixels, so is only used when
         // both width and height are lower than source.
         case 3:
-          if(x_offset + (double)(x-x1-source.topleft.x)*x_scale > width ||
-             y_offset + (double)(y-y1-source.topleft.y)*y_scale > height) { break; }
-          putpixel(x_pos, y_pos);
+          if(x_offset + (double)(x-x1)*x_scale > width ||
+             y_offset + (double)(y-y1)*y_scale > height) { break; }
+          pixel_draw(pixel, x_pos, y_pos);
           break;
       }
 
@@ -231,16 +268,16 @@ int image_draw_section(Image source, int x_1, int y_1, int x_2, int y_2, int x_o
 }
 
 // Routes you to using image_draw_section, set to draw the whole image.
-//  Returns 0 on halting error
+//  Returns 0 on error
 //  Returns # source pixels drawn on success
 int image_draw(Image source, int x_offset, int y_offset) {
-  return image_draw_section(source, 0,0, source.original_width, source.original_height, x_offset, y_offset);
+  return image_draw_section(source, 0,0, source.source_width, source.source_height, x_offset, y_offset);
 }
 
 // Iterates through the string you give it, and based on the number of characters
 // in the font, their width, and other factors, obtain the image from the source
 // based on the ASCII code of the letter.
-//  Returns 0 on halting error
+//  Returns 0 on error
 //  Returns 1 on success
 int text_draw_offset(Image cfont, char* str, int x_offset, int y_offset) {
   int x_pos=0, y_pos=0, i;
@@ -250,13 +287,13 @@ int text_draw_offset(Image cfont, char* str, int x_offset, int y_offset) {
 
   if (!cfont.font)        { debugf("TEXT DRAW", "Font not initialized"); return 0; } // This image is not designated as a font
   if (cfont.data == NULL) { debugf("TEXT DRAW", "No source data");       return 0; }
-  if (cfont.original_width  <= 0) { debugf("TEXT DRAW", "Invalid source width");  return 0; }
-  if (cfont.original_height <= 0) { debugf("TEXT DRAW", "Invalid source height"); return 0; }
+  if (cfont.source_width  <= 0) { debugf("TEXT DRAW", "Invalid source width");  return 0; }
+  if (cfont.source_height <= 0) { debugf("TEXT DRAW", "Invalid source height"); return 0; }
 
   // Process the DRAWING width of the characters, factors such as source image scale...
   // Allows you to scale up text by modifying source image.
-  dchar_width  = (cfont.original_width / cfont.characters) * (((double)cfont.width/(double)cfont.original_width)*cfont.scale);
-  dchar_height = (cfont.original_height) * (((double)cfont.height/(double)cfont.original_height)*cfont.scale);
+  dchar_width  = (cfont.source_width / cfont.characters) * (((double)cfont.width/(double)cfont.source_width)*cfont.scale);
+  dchar_height = (cfont.source_height) * (((double)cfont.height/(double)cfont.source_height)*cfont.scale);
 
   for(i=0; i<strlen(str); i++) {
     int ascii_code = str[i];
@@ -396,17 +433,17 @@ void image_free(Image* source) {
   if (source->subimage)     { debugf("IMAGE DEL", "Can't unload subimages"); return; }
   if (source->data == NULL) { debugf("IMAGE DEL", "No image in source");     return; }
 
-  for (i=0; i<source->original_width; i++) {
+  for (i=0; i<source->source_width; i++) {
     free(source->data[i]);
   }
   free(source->data);
 
-  sprintf(debugger.buffer, "Unloaded %dx%d", source->original_width, source->original_height);
+  sprintf(debugger.buffer, "Unloaded %dx%d", source->source_width, source->source_height);
   debugf("IMAGE FREE", debugger.buffer);
 }
 
 // Sets an images RGB values... simple shorthand.
-void image_setrgb(Image*source, int r, int g, int b) {
+void image_setrgb(Image* source, int r, int g, int b) {
   source->r = max(min(r,255), 0);
   source->g = max(min(g,255), 0);
   source->b = max(min(b,255), 0);
@@ -434,8 +471,8 @@ int image_convert_to_indexed(Image* source) {
 
   palette = malloc(sizeof(Pixel));
 
-  for (x=0; x < source->original_width; x++) {
-    for (y=0; y < source->original_height; y++) {
+  for (x=0; x < source->source_width; x++) {
+    for (y=0; y < source->source_height; y++) {
       //
     }
   }
@@ -446,26 +483,26 @@ int image_convert_to_indexed(Image* source) {
 // Creates a new Image struct pointing to the data in a different one.
 // How you manage this is on your own, but it won't memory leak because it doesn't
 // allocate new memory.
-//  Returns NULL on halting error
+//  Returns NULL on error
 //  Returns pointer to [destination] on success
 Image* image_subimage(Image source, Image* destination, int x, int y, int width, int height) {
   if (source.data == NULL)         { debugf("SUBIMAGE", "No image loaded in source");   return NULL; }
-  if (source.original_width  <= 0) { debugf("SUBIMAGE", "Invalid source width");        return NULL; }
-  if (source.original_height <= 0) { debugf("SUBIMAGE", "Invalid source height");       return NULL; }
+  if (source.source_width  <= 0) { debugf("SUBIMAGE", "Invalid source width");        return NULL; }
+  if (source.source_height <= 0) { debugf("SUBIMAGE", "Invalid source height");       return NULL; }
   if (&source == destination)      { debugf("SUBIMAGE", "Source can't be destination"); return NULL; }
   if (destination == NULL)         { debugf("SUBIMAGE", "Destination can't be NULL");   return NULL; }
   if (x < 0) { debugf("IMAGE SUB", "Invalid X position");   return NULL; }
   if (y < 0) { debugf("IMAGE SUB", "Invalid Y position");   return NULL; }
-  if (width  <= 0 || width  + x  > source.original_width)  { debugf("IMAGE SUB", "Invalid width");  return NULL; }
-  if (height <= 0 || height + y  > source.original_height) { debugf("IMAGE SUB", "Invalid height"); return NULL; }
+  if (width  <= 0 || width  + x  > source.source_width)  { debugf("IMAGE SUB", "Invalid width");  return NULL; }
+  if (height <= 0 || height + y  > source.source_height) { debugf("IMAGE SUB", "Invalid height"); return NULL; }
 
   *destination = source;
   destination->topleft.x = x + source.topleft.x;
   destination->topleft.y = y + source.topleft.y;
-  destination->original_width = width;
-  destination->original_height = height;
-  destination->width =  destination->original_width;
-  destination->height = destination->original_height;
+  destination->source_width = width;
+  destination->source_height = height;
+  destination->width =  destination->source_width;
+  destination->height = destination->source_height;
   destination->scale = source.scale;
   destination->r = source.r;
   destination->g = source.g;
@@ -486,17 +523,17 @@ Image* image_subimage(Image source, Image* destination, int x, int y, int width,
 // You have to free it when you're done with it as a sacrifice for
 // the convinience of this sort of access. If you don't want that, manage
 // it using image_subimage yourself.
-//  Returns NULL on halting error
+//  Returns NULL on error
 //  Returns pointer to [destination] on success
 ImageGrid* image_gridsplit(Image source, ImageGrid* destination, int columns, int rows) {
   ImageGrid new_grid;
   int x, y;
-  int part_width = floor((double)source.original_width/(double)columns);
-  int part_height = floor((double)source.original_height/(double)rows);
+  int part_width = floor((double)source.source_width/(double)columns);
+  int part_height = floor((double)source.source_height/(double)rows);
 
   if (source.data == NULL)         { debugf("IMAGE SPLIT", "No image loaded in source"); return NULL; }
-  if (source.original_width  <= 0) { debugf("IMAGE SPLIT", "Invalid source width");      return NULL; }
-  if (source.original_height <= 0) { debugf("IMAGE SPLIT", "Invalid source height");     return NULL; }
+  if (source.source_width  <= 0) { debugf("IMAGE SPLIT", "Invalid source width");      return NULL; }
+  if (source.source_height <= 0) { debugf("IMAGE SPLIT", "Invalid source height");     return NULL; }
   if (destination == NULL)         { debugf("SUBIMAGE", "Destination can't be NULL");    return NULL; }
   if (columns  <= 0) { debugf("IMAGE SPLIT", "Invalid columns #");  return NULL; }
   if (rows     <= 0) { debugf("IMAGE SPLIT", "Invalid rows #");     return NULL; }
@@ -537,7 +574,7 @@ void image_freegrid(ImageGrid* source) {
 //
 
 // image_play_animation(source)
-//  Returns 0 on halting error
+//  Returns 0 on error
 //  Returns 1 on frames image is not drawn
 //  Returns 2 on frames image is drawn
 int image_play_animation(Image* source, int x, int y, int force_draw) {
@@ -556,10 +593,10 @@ int image_play_animation(Image* source, int x, int y, int force_draw) {
   if (force_draw) {
     image_erase(0,0,0,.99);
     image_subimage(*source, &current_frame,
-                   source->original_width/source->frames*source->current_frame,0,
-                   source->original_width/source->frames,source->original_height);
+                   source->source_width/source->frames*source->current_frame,0,
+                   source->source_width/source->frames,source->source_height);
     current_frame.height = source->height;
-    current_frame.width  = source->width == source->original_width ? source->width/source->frames : source->width;
+    current_frame.width  = source->width == source->source_width ? source->width/source->frames : source->width;
     image_draw(current_frame, x, y);
     return 2;
   }
@@ -572,7 +609,7 @@ int image_play_animation(Image* source, int x, int y, int force_draw) {
 //
 
 // Allocates a new image
-//  Returns NULL on halting error
+//  Returns NULL on error
 //  Returns pointer to destination on success
 Image* image_new(Image* destination, int width, int height) {
   int i;
@@ -589,8 +626,8 @@ Image* image_new(Image* destination, int width, int height) {
 
   destination->width           = width;
   destination->height          = height;
-  destination->original_width  = destination->width;
-  destination->original_height = destination->height;
+  destination->source_width  = destination->width;
+  destination->source_height = destination->height;
   strcpy(destination->name, "");
   destination->transparent.r   = 0;
   destination->transparent.g   = 0;
@@ -608,11 +645,11 @@ Image* image_new(Image* destination, int width, int height) {
   destination->subimage        = 0;
   destination->font            = 0;
 
-  destination->data = (struct Pixel**)malloc(destination->width * sizeof(struct Pixel*));
+  destination->data = (Pixel**)malloc(destination->width * sizeof(Pixel*));
   for (i=0; i<destination->width; i++) {
-    destination->data[i] = (struct Pixel*)malloc(destination->height * sizeof(struct Pixel));
+    destination->data[i] = (Pixel*)malloc(destination->height * sizeof(Pixel));
   }
-  sprintf(debugger.buffer, "Created %dx%d", destination->width, destination->original_height);
+  sprintf(debugger.buffer, "Created %dx%d", destination->width, destination->source_height);
   debugf("IMAGE NEW", debugger.buffer);
   return destination;
 }
@@ -621,14 +658,14 @@ Image* image_new(Image* destination, int width, int height) {
 int image_make_font(Image *destination, int num_chars, char first_char) {
   destination->characters  = num_chars;
   destination->first_character = first_char;
-  destination->char_width  = (destination->original_width / destination->characters);
-  destination->char_height = (destination->original_height);
+  destination->char_width  = (destination->source_width / destination->characters);
+  destination->char_height = (destination->source_height);
   destination->font        = 1;
   return 1;
 }
 
 // Loads a BMP image into an existing struct
-//  Returns 0 on halting error
+//  Returns 0 on error
 //  Returns pointer to destination on success
 Image* bmp_load(char source[], Image* destination) {
   int bmp_bitrate, padding;
@@ -654,33 +691,11 @@ Image* bmp_load(char source[], Image* destination) {
 
   if(bmp_header[0]==66 && bmp_header[1]==77) {
     char temp[4];
-    destination->width = bmp_header[18]+bmp_header[19]*256;
-    destination->height = bmp_header[22]+bmp_header[23]*256;
+
+    image_new(destination, bmp_header[18]+bmp_header[19]*256, bmp_header[22]+bmp_header[23]*256);
+
     bmp_bitrate = bmp_header[28];
     padding = destination->width % 4;
-
-    destination->original_width = destination->width;
-    destination->original_height = destination->height;
-    strcpy(destination->name, source);
-    destination->transparent.r   = 0;
-    destination->transparent.g   = 0;
-    destination->transparent.b   = 0;
-    destination->r               = 255;
-    destination->g               = 255;
-    destination->b               = 255;
-    destination->topleft.x       = 0;
-    destination->topleft.y       = 0;
-    destination->scale           = 1;
-    destination->char_height     = 0;
-    destination->characters      = 0;
-    destination->first_character = ' ';
-    destination->char_width      = 0;
-    destination->subimage     = 0;
-
-    destination->data = (Pixel**)malloc(destination->width * sizeof(Pixel*));
-    for (i=0; i<destination->width; i++) {
-      destination->data[i] = (Pixel*)malloc(destination->height * sizeof(Pixel));
-    }
 
     fseek(bmp_file, bmp_header[10], SEEK_SET);
 
@@ -691,8 +706,7 @@ Image* bmp_load(char source[], Image* destination) {
         destination->data[j][i].r = fgetc(bmp_file);
         destination->data[j][i].t = 0;
         if(bmp_bitrate==32) {
-          // skip extra bit
-          fgetc(bmp_file);
+          destination->data[j][i].t = (double)(fgetc(bmp_file)) / 255.0;
         }
       }
       if(padding != 0) fread(&temp, padding, 1, bmp_file);

@@ -19,8 +19,8 @@ Image image_gen_debug_image() {
   struct Pixel c13 = {239,239,223};
   struct Pixel c14 = {255,119,103};
   strcpy(gi.name, "debug_image");
-  gi.width = 57; gi.original_width = gi.width;
-  gi.height = 67; gi.original_height = gi.height;
+  gi.width = 57; gi.source_width = gi.width;
+  gi.height = 67; gi.source_height = gi.height;
   gi.angle=0;
   gi.scale=0;
   gi.transparent.r=0;

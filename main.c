@@ -1,4 +1,7 @@
-// C-lib: MAIN
+//            __        __   __                  __
+// |  |  /\  |__) |    /  \ /  ` |__/    |    | |__)
+// |/\| /~~\ |  \ |___ \__/ \__, |  \    |___ | |__)
+//
 
 // This is the base file for the library, must be included first.
 // The other files will list what pre-requisites they have at
@@ -10,10 +13,6 @@
   #error This file already exists in global code.
 #endif
 
-//  __   ___            __
-// / _` |__  __ |    | |__)
-// \__> |___    |___ | |__)
-//
 
 // Game FPS is used to display animations, if you use animations in
 // your game, make sure this is set accurately.
