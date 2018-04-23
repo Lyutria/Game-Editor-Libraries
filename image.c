@@ -589,7 +589,6 @@ int image_play_animation(Image* source, int x, int y, int force_draw) {
     force_draw = 1;
   }
   source->frame_count += (double)GAME_FPS / real_fps;
-
   if (force_draw) {
     image_erase(0,0,0,.99);
     image_subimage(*source, &current_frame,
@@ -693,6 +692,7 @@ Image* bmp_load(char source[], Image* destination) {
     char temp[4];
 
     image_new(destination, bmp_header[18]+bmp_header[19]*256, bmp_header[22]+bmp_header[23]*256);
+    strcpy(destination->name, source);
 
     bmp_bitrate = bmp_header[28];
     padding = destination->width % 4;
