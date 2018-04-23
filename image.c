@@ -588,7 +588,9 @@ int image_play_animation(Image* source, int x, int y, int force_draw) {
     source->frame_count = 0;
     force_draw = 1;
   }
+
   source->frame_count += (double)GAME_FPS / real_fps;
+
   if (force_draw) {
     image_erase(0,0,0,.99);
     image_subimage(*source, &current_frame,
